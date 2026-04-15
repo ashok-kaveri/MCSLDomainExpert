@@ -32,7 +32,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 **Plans**: 5 plans
 
 Plans:
-- [ ] 01-01: Project scaffold — directory structure, config.py, .env template, explicit dotenv path
+- [x] 01-01: Project scaffold — directory structure, config.py, .env template, explicit dotenv path
 - [ ] 01-02: ChromaDB setup — mcsl_knowledge and mcsl_code_knowledge collections, vectorstore.py, code_indexer.py
 - [ ] 01-03: Ingest pipeline — run_ingest.py with 5 sources: KB articles (docs/kb_snapshots/), TC sheet (Google Sheets), MCSL wiki (/Users/madan/Documents/mcsl-wiki/wiki/), storepepSAAS codebase (server/src/shared/), mcsl-test-automation repo
 - [ ] 01-04: RAG auto-updater — rag_updater.py embeds approved Trello card ACs and test cases after each sprint
@@ -106,7 +106,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Foundation | 0/5 | Not started | - |
+| 1. Foundation | 1/5 | In progress | - |
 | 2. AI QA Agent Core | 0/7 | Not started | - |
 | 3. Label + Docs + Pre-Requirements | 0/6 | Not started | - |
 | 4. Pipeline Dashboard | 0/5 | Not started | - |

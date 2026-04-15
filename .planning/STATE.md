@@ -10,27 +10,27 @@ See: .planning/PROJECT.md (updated 2026-04-15)
 ## Current Position
 
 Phase: 1 of 4 (Foundation)
-Plan: 0 of 5 in current phase
-Status: Ready to plan
-Last activity: 2026-04-15 — Roadmap and STATE.md initialized
+Plan: 1 of 5 in current phase
+Status: In progress
+Last activity: 2026-04-15 — 01-01 project scaffold complete
 
-Progress: [░░░░░░░░░░] 0%
+Progress: [█░░░░░░░░░] 5%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 0
-- Average duration: -
-- Total execution time: 0 hours
+- Total plans completed: 1
+- Average duration: 19 min
+- Total execution time: 0.32 hours
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| - | - | - | - |
+| 01-foundation | 1 | 19 min | 19 min |
 
 **Recent Trend:**
-- Last 5 plans: none yet
+- Last 5 plans: 01-01 (19 min)
 - Trend: -
 
 *Updated after each plan completion*
@@ -46,6 +46,9 @@ Recent decisions affecting current work:
 - Init: Multi-carrier abstraction — carrier name injected into planning prompt from AC text detection
 - Init: Separate ChromaDB collections — mcsl_knowledge + mcsl_code_knowledge (not shared with FedEx project)
 - Init: Explicit dotenv path in config.py — required to avoid silent load failures across working directories
+- 01-01: ChromaDB collection names mcsl_knowledge + mcsl_code_knowledge established — no fedex_* names
+- 01-01: conftest.py uses lazy imports for langchain_core — test_config.py runs without full stack installed
+- 01-01: Wave-based skip reasons in test stubs — enables progressive activation across plans
 
 ### Pending Todos
 
@@ -53,10 +56,10 @@ None yet.
 
 ### Blockers/Concerns
 
-- MCSL automation repo path not yet confirmed — needed for INFRA-03 (code RAG indexing) and LABEL-05 (order creator reads productsconfig.json + addressconfig.json)
+- langchain, chromadb not yet installed system-wide — 01-02 should create venv or install before using
 
 ## Session Continuity
 
 Last session: 2026-04-15
-Stopped at: Roadmap created — all four phases defined, 44 v1 requirements mapped, files written
+Stopped at: Completed 01-01 — project scaffold, config.py, Wave 0 test stubs
 Resume file: None

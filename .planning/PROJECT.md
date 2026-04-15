@@ -56,10 +56,14 @@ The AI QA Agent must be able to autonomously verify any AC scenario for the MCSL
   - **Ingest into:** `mcsl_knowledge` ChromaDB collection
 - **storepepSAAS codebase:** `/Users/madan/Documents/storepep-react/storepepSAAS/` — actual MCSL app backend (Node.js/Express, 1,684 JS files) + frontend (React, 699 JS files)
   - Internal name: "StorePep" (MCSL app = storepep product)
-  - Key source dirs: `server/src/shared/storepepAdaptors/` (carrier adaptors), `server/src/shared/order/`, `server/src/shared/settings/`, `server/src/shared/ratesApi/`
-  - Key files: `carrierConfig.js`, `storePepConstants.js`, `serviceNames.js`, `OrderProcessingService.js`
-  - Carrier codes: FedEx=C2, UPS=C3, DHL=C1, EasyPost=C22
-  - **Ingest into:** `mcsl_code_knowledge` ChromaDB collection (focused on server/src/shared/ — skip node_modules, tests, migrations)
+  - **Server source:** `server/src/shared/` — carrier adaptors, order processing, rate API, settings, constants (1,684 JS files total, focused on shared/)
+    - Key files: `carrierConfig.js`, `storePepConstants.js`, `serviceNames.js`, `OrderProcessingService.js`
+    - Carrier codes: FedEx=C2, UPS=C3, DHL=C1, EasyPost=C22
+    - Source type: `storepepsaas_server` | Skip: `node_modules/`, `tests/`, `db-migrations/`
+  - **Client source:** `client/src/` — React/Redux UI components (699 JS files)
+    - Key dirs: `components/form/views/summary/order-summary/` (LabelSummary.js, RateSummary.js, PackingSummary.js, OrderSummaryContainerNew.js), `components/form/views/orders/`, `actions/labels/`, `actions/orders/`, `components/form/settings/carriers/`
+    - Source type: `storepepsaas_client` | Extensions: `.js`, `.jsx` | Skip: `node_modules/`, `__tests__/`
+  - **Ingest into:** `mcsl_code_knowledge` ChromaDB collection (both server + client indexed separately)
 - **Key MCSL difference from FedEx:** MCSL supports multiple carriers — each carrier has its own account config, service list, label format, and special services. The AI QA Agent must be carrier-aware when planning and executing scenarios.
 
 ## Key MCSL App Flows (vs FedEx) — VERIFIED FROM CODE + WIKI
