@@ -49,16 +49,16 @@ Plans:
   4. The agent navigates carrier account configuration (App Settings → Carriers → Add/Edit) and can add or update a carrier account for FedEx, UPS, USPS, or DHL
   5. Carrier-specific special service flows complete without error: FedEx (signature, dry ice, alcohol, battery, HAL, insurance), UPS (signature, insurance, COD), USPS (signature, registered mail), DHL (insurance, signature, international)
   6. Stop flag is checked at each loop iteration — pressing stop during a run halts the agent within one iteration
-**Plans**: 5 plans
+**Plans**: 7 plans
 
 Plans:
-- [ ] 02-01: smart_ac_verifier.py scaffold — scenario extractor, domain expert query, planning prompt with carrier injection
-- [ ] 02-02: Agentic browser loop — Playwright setup, iframe-aware navigation, AX tree capture, screenshot capture, network filter
-- [ ] 02-03: Action handlers — observe, click, fill, scroll, navigate, switch_tab, close_tab, verify, qa_needed
-- [ ] 02-04: Multi-carrier planning — carrier detection from AC text, carrier-specific plan prompts, CARRIER-02 account config flow
-- [ ] 02-05: Carrier special service flows — CARRIER-03 (FedEx), CARRIER-04 (UPS), CARRIER-05 (USPS), CARRIER-06 (DHL)
-- [ ] 02-06: Order creator — order_creator.py reads mcsl-test-automation productsconfig.json + addressconfig.json, Shopify REST API, single + bulk order creation
-- [ ] 02-07: Stop flag integration and verdict reporting (pass/fail/partial/qa_needed with finding text + screenshot evidence)
+- [ ] 02-01-PLAN.md — smart_ac_verifier.py scaffold: Wave 0 test stubs, scenario extractor, domain expert query, planning prompt with carrier injection
+- [ ] 02-02-PLAN.md — Agentic browser loop: Playwright setup, iframe-aware AX tree, screenshot, network filter
+- [ ] 02-03-PLAN.md — Action handlers: observe, click (8-strategy), fill, scroll, navigate (MCSL URL map), switch_tab, close_tab, verify, qa_needed; _decide_next Claude invocation
+- [ ] 02-04-PLAN.md — Multi-carrier planning: hardened carrier detection (7 carriers), carrier context in plan+decision prompts, CARRIER-02 account config flow and helper
+- [ ] 02-05-PLAN.md — Carrier special service flows: _get_preconditions() for FedEx/UPS/USPS/DHL with MCSL label flow references; human verify checkpoint
+- [ ] 02-06-PLAN.md — Order creator: order_creator.py reads SIMPLE_PRODUCTS_JSON from carrier-env files (not productsconfig.json), Shopify REST API, single + bulk
+- [ ] 02-07-PLAN.md — Stop flag integration and verdict reporting: verify_ac() fully wired, VerificationReport.to_dict(), full test suite green
 
 ### Phase 3: Label + Docs + Pre-Requirements
 **Goal**: The agent correctly handles all label generation flows, verifies documents using all five strategies, and injects hardcoded pre-requirements for scenario types that need app-level setup before label generation
@@ -70,12 +70,12 @@ Plans:
   3. All five document verification strategies produce readable output: badge check (DOC-01), ZIP download read (DOC-02), How To JSON extraction (DOC-03), Print Documents new-tab screenshot with visual label codes (DOC-04), and rate log screenshot (DOC-05)
   4. For a dry ice scenario, the agent automatically enables "Is Dry Ice Needed" on AppProducts before generating the label and unchecks it after — without human prompting
   5. Pre-requirements are injected and cleaned up correctly for all six scenario types: dry ice, alcohol, battery, signature, HAL, and insurance
-**Plans**: 5 plans
+**Plans**: 6 plans
 
 Plans:
-- [ ] 03-01: Manual label flow — Shopify Orders → More Actions → Generate Label → Get Rates → service selection → SideDock → Generate → Order Summary
+- [ ] 03-01: Manual label flow — App order grid → Account Card → filter by Order ID → Order Summary → Generate Label → LABEL CREATED
 - [ ] 03-02: Auto-generate and return label flows — LABEL-02, LABEL-04
-- [ ] 03-03: Bulk label generation — LABEL-03 (select all via header label, Actions → Generate Labels link, waitForURL pattern)
+- [ ] 03-03: Bulk label generation — LABEL-03 (header checkbox → Generate labels button → Label Batch page)
 - [ ] 03-04: Document verification strategies — DOC-01 badge, DOC-02 Download Documents ZIP, DOC-03 How To JSON, DOC-04 Print Documents new tab, DOC-05 rate log
 - [ ] 03-05: download_zip and download_file action handlers — ZIP intercept, unzip, read JSON/CSV/XML/TXT/log; direct file intercept
 - [ ] 03-06: Pre-requirements resolver — _get_preconditions() for dry ice, alcohol, battery, signature, HAL, insurance with cleanup steps
