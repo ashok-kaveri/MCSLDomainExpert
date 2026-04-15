@@ -7,29 +7,24 @@ corresponding feature. Skip reason format: "Wave 0 stub — <REQ-ID>".
 import pytest
 
 
-@pytest.mark.skip(reason="Wave 0 stub — AGENT-01")
 def test_extract_scenarios():
     """AGENT-01: Agent extracts testable scenarios from AC text as JSON array."""
-    try:
-        from pipeline.smart_ac_verifier import _extract_scenarios
-    except ImportError:
-        pytest.skip("pipeline.smart_ac_verifier not yet implemented")
+    from pipeline.smart_ac_verifier import _extract_scenarios
     from unittest.mock import MagicMock
 
     mock_claude = MagicMock()
     mock_claude.invoke.return_value.content = '["Scenario A", "Scenario B"]'
-    result = _extract_scenarios("Given a UPS account is configured, when a label is generated, then the label status shows label generated.", claude=mock_claude)
+    result = _extract_scenarios(
+        "Given a UPS account is configured, when a label is generated, then the label status shows label generated.",
+        claude=mock_claude,
+    )
     assert isinstance(result, list)
     assert len(result) > 0
 
 
-@pytest.mark.skip(reason="Wave 0 stub — AGENT-02")
 def test_domain_expert_query():
     """AGENT-02: Agent queries Domain Expert RAG for expected behaviour per scenario."""
-    try:
-        from pipeline.smart_ac_verifier import _ask_domain_expert
-    except ImportError:
-        pytest.skip("pipeline.smart_ac_verifier not yet implemented")
+    from pipeline.smart_ac_verifier import _ask_domain_expert
     from unittest.mock import MagicMock
 
     mock_claude = MagicMock()
@@ -43,13 +38,9 @@ def test_domain_expert_query():
     assert len(result) > 0
 
 
-@pytest.mark.skip(reason="Wave 0 stub — AGENT-03")
 def test_build_execution_plan():
     """AGENT-03: Agent generates JSON execution plan with nav_clicks, look_for, api_to_watch, order_action, carrier."""
-    try:
-        from pipeline.smart_ac_verifier import _plan_scenario
-    except ImportError:
-        pytest.skip("pipeline.smart_ac_verifier not yet implemented")
+    from pipeline.smart_ac_verifier import _plan_scenario
     from unittest.mock import MagicMock
 
     mock_claude = MagicMock()
@@ -109,15 +100,13 @@ def test_action_handlers():
     assert True
 
 
-@pytest.mark.skip(reason="Wave 0 stub — CARRIER-01")
 def test_carrier_detection():
     """CARRIER-01: Carrier name detected from AC text is injected into planning prompt."""
-    try:
-        from pipeline.smart_ac_verifier import _detect_carrier
-    except ImportError:
-        pytest.skip("pipeline.smart_ac_verifier not yet implemented")
+    from pipeline.smart_ac_verifier import _detect_carrier
+
     assert _detect_carrier("FedEx account configured") == ("FedEx", "C2")
     assert _detect_carrier("UPS label generated") == ("UPS", "C3")
+    assert _detect_carrier("DHL shipment") == ("DHL", "C1")
     assert _detect_carrier("unknown carrier") == ("", "")
 
 
