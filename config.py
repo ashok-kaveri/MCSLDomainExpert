@@ -45,6 +45,15 @@ STOREPEPSAAS_SHARED_PATH = os.getenv(
     "STOREPEPSAAS_SHARED_PATH",
     str(Path.home() / "Documents" / "storepep-react" / "storepepSAAS" / "server" / "src" / "shared"),
 )
+# Aliases used by ingest pipeline (match --sources argument names)
+STOREPEPSAAS_SERVER_PATH = os.getenv(
+    "STOREPEPSAAS_SERVER_PATH",
+    str(Path.home() / "Documents" / "storepep-react" / "storepepSAAS" / "server" / "src" / "shared"),
+)
+STOREPEPSAAS_CLIENT_PATH = os.getenv(
+    "STOREPEPSAAS_CLIENT_PATH",
+    str(Path.home() / "Documents" / "storepep-react" / "storepepSAAS" / "client" / "src"),
+)
 
 # File extensions to index from source code directories
 CODE_FILE_EXTENSIONS = [".ts", ".tsx", ".js", ".jsx", ".php", ".java", ".py", ".go", ".rb", ".cs"]
