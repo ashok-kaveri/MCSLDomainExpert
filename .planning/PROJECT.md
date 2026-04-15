@@ -40,7 +40,7 @@ The AI QA Agent must be able to autonomously verify any AC scenario for the MCSL
 ## Context
 
 - **Architecture reference:** FedexDomainExpert at `~/Documents/Fed-Ex-automation/FedexDomainExpert` — full copy of the agent architecture with Playwright browser automation, ChromaDB RAG, Claude AI, Streamlit UI
-- **MCSL automation repo:** Separate repo (`mcsl-test-automation`) — path to be confirmed; provides POM files, productsconfig.json, addressconfig.json, and .env for Shopify API access
+- **MCSL automation repo:** `/Users/madan/Documents/mcsl-test-automation` — Playwright/TypeScript, same pattern as fedex-test-automation. Key difference: `carrier-envs/` folder with per-carrier `.env` files (ups.env, usps-ship.env, amazon.env, australia-post.env, etc.) instead of a single `.env`. Store: `mcsl-automation.myshopify.com`
 - **70% automation coverage:** Existing Playwright tests cover most core flows — high value from AI QA Agent since the remaining 30% can be explored
 - **TC Sheet:** https://docs.google.com/spreadsheets/d/1oVtOaM2PesVR_TkuVaBKpbp_qQdmq4FQnN43Xew0FuY/edit — primary source for test case definitions to ingest into RAG
 - **Knowledge Base:** https://www.pluginhive.com/knowledge-base/shopify-multi-carrier-shipping-label-app-faqs/ — 5 categories: Setting Up, Troubleshooting, Knowledgebase, FAQ, Use Cases
@@ -65,8 +65,62 @@ The AI QA Agent must be able to autonomously verify any AC scenario for the MCSL
 ### Special Services (carrier-specific)
 - FedEx: signature, dry ice, alcohol, battery, HAL, insurance
 - UPS: signature, insurance, COD
-- USPS: signature, registered mail
-- DHL: insurance, signature
+- USPS (STAMPS): signature, registered mail
+- DHL: insurance, signature, international
+- Canada Post: package + signature required
+- Australia Post, Aramex, TNT, Sendle, PostNord, DHL Sweden, Parcel Force: Quick Ship with Signature Required
+
+### Order Status Transitions (MCSL-specific)
+```
+Initial → Processing → Label Created → Fulfilled
+                    ↘ Label Failed
+Special: Partially Externally Fulfilled | Externally Fulfilled | CANCELLED | Return Created
+```
+- CANCELLED: strikethrough text, red color in grid
+- Partially Externally Fulfilled: generated when Shopify Hold/Release used; creates 2 batches for same order
+
+### SLGP Flow (Single Label Generation Page)
+- Order Summary page — primary label generation UI
+- Presets/Favorites: up to 20 presets per order (Initial/Processing only); auto-highlights when order matches
+- Edit Address: opens popup → rates auto-refresh → updated address on label, packing slip, invoices
+- Edit Payment: COD ↔ Prepaid toggle → order reprocesses automatically
+- Change Carrier Service: modal shows all active carriers → rate summary updates
+- Presets persist across sessions; deleted via colored icon click
+
+### Quick Ship Flow
+- Select multiple orders in grid → Quick Ship button appears in sticky header
+- Modal pre-fills: address, carrier, service from first order; weight/dimensions blank
+- Generates Label Batch → marks all orders Fulfilled
+- Each order: single package, single label
+- Supports presets for auto-fill
+
+### Touchless Print
+- Barcode scan → auto-fills order search → opens order
+- "Generate Label & Fulfill" → label auto-prints → status Fulfilled
+- Tested with: Touchless print toggle enabled
+
+### Batch Flow
+- Create Batch from Orders Grid: select orders → Create Batch → enter name → Generate Label
+- Actions: print (Label, Packing Slips, Tax Invoice, Pick List, CI, All), Mark Fulfilled, Retry
+- Parallel processing: configurable concurrency, queue-based
+- Partially Fulfilled: On Hold → label → Fulfill → Release → creates separate batch → "Partially Externally Fulfilled"
+
+### Document Types
+- Label — main shipping label
+- Packing Slip — order contents list
+- Tax Invoice — billing document
+- Commercial Invoice — international customs
+- Manifest — end-of-day carrier manifest
+- Pick List — warehouse pick list (order-based or product-based)
+
+### Known App Bugs (from TC Sheet)
+1. **Quantity Reduction** — order update with reduced quantity not working; existing issue
+2. **Retry Batch Loop** — infinite loop after Shopify address update for label-failed orders in batch
+3. **Cancel Fulfillment** — not functioning correctly for partially fulfilled orders
+4. **Payment mode changes** — only work with XpressBees, Delhivery, BlueDart, Amazon
+
+### Manual Must-Cover Areas (from TC Sheet — require AI QA Agent focus)
+Batch Creation, Volumetric weights, Box Packing, Stacking Packing, Weight-based packing, Rates, Automation rules sanity, Discounts, Label with long shipping address, Auto order update script, BoGo Fix, Edit packages sanity, Touchless one print, Reports, COD cases
 
 ## Constraints
 
@@ -74,7 +128,9 @@ The AI QA Agent must be able to autonomously verify any AC scenario for the MCSL
 - **Embeddings:** Ollama `nomic-embed-text` (local)
 - **ChromaDB collections:** `mcsl_knowledge`, `mcsl_code_knowledge`
 - **Config:** Must use explicit dotenv path (same pattern as FedexDomainExpert `config.py` fix)
-- **Automation repo path:** Will be provided once confirmed — needed for code RAG indexing
+- **Automation repo path:** `/Users/madan/Documents/mcsl-test-automation` — confirmed
+- **Carrier env files:** `carrier-envs/ups.env`, `carrier-envs/usps-ship.env`, `carrier-envs/amazon.env`, `carrier-envs/australia-post.env`, `carrier-envs/blue-dart.env`, `carrier-envs/packaging-fedexrest.env` etc. Each contains CARRIER, SHOPIFYURL, APPURL, SHOPIFY_API_VERSION, SHOPIFY_STORE_NAME
+- **Shopify store:** `mcsl-automation` — `mcsl-automation.myshopify.com`, API version 2023-01
 - **TC sheet:** Google Sheets ID `1oVtOaM2PesVR_TkuVaBKpbp_qQdmq4FQnN43Xew0FuY`
 
 ## Key Decisions
@@ -87,4 +143,4 @@ The AI QA Agent must be able to autonomously verify any AC scenario for the MCSL
 | YOLO execution mode | User preference — auto-approve, fast execution | — Pending |
 
 ---
-*Last updated: 2026-04-15 after initialization*
+*Last updated: 2026-04-15 after TC sheet ingestion (all tabs read: Draft Plan, Sections, Single Label Generation, Orders Grid, Batch Flow, Order_Update, Rate_Domestic_Packaging Type, Pluginhive app Setup, SLGP Flow & Quick Ship, Manual Must Cover)*
