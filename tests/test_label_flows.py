@@ -91,10 +91,42 @@ def test_auto_generate_flow():
     )
 
 
-@pytest.mark.skip(reason="Wave 0 stub — activated in later plans")
 def test_bulk_label_flow():
-    """LABEL-03: Agent handles Bulk Label generation (header checkbox → Generate labels → SUCCESS)."""
-    pass
+    """LABEL-03: _MCSL_WORKFLOW_GUIDE contains Bulk Label flow with correct casing and steps."""
+    from pipeline.smart_ac_verifier import _MCSL_WORKFLOW_GUIDE
+
+    # Critical: "Generate labels" must use lowercase "l" (exact button name in orderGridPage.ts)
+    assert "Generate labels" in _MCSL_WORKFLOW_GUIDE, (
+        "_MCSL_WORKFLOW_GUIDE must contain 'Generate labels' (lowercase l) — "
+        "using 'Generate Labels' (capital L) will fail all 7 click attempts"
+    )
+
+    # Guide must explicitly warn about the lowercase "l" casing requirement
+    assert "lowercase" in _MCSL_WORKFLOW_GUIDE, (
+        "_MCSL_WORKFLOW_GUIDE must explicitly warn that 'Generate labels' uses lowercase 'l' "
+        "— the agent needs the warning to avoid using 'Generate Labels' (capital L)"
+    )
+
+    # Guide must describe the header checkbox selection step
+    assert "header" in _MCSL_WORKFLOW_GUIDE and "checkbox" in _MCSL_WORKFLOW_GUIDE, (
+        "_MCSL_WORKFLOW_GUIDE must describe the header row checkbox step for bulk label flow"
+    )
+
+    # Guide must include a filter step for unfulfilled orders
+    assert "Unfulfilled" in _MCSL_WORKFLOW_GUIDE or "unfulfilled" in _MCSL_WORKFLOW_GUIDE, (
+        "_MCSL_WORKFLOW_GUIDE Bulk Label section must include filter for unfulfilled orders "
+        "so only the test orders are visible in the grid"
+    )
+
+    # Guide must reference the Label Batch page result
+    assert "Label Batch" in _MCSL_WORKFLOW_GUIDE, (
+        "_MCSL_WORKFLOW_GUIDE must reference 'Label Batch' page that opens after Generate labels"
+    )
+
+    # Guide must include Mark as Fulfilled as the final bulk step
+    assert "Mark as Fulfilled" in _MCSL_WORKFLOW_GUIDE, (
+        "_MCSL_WORKFLOW_GUIDE must include 'Mark as Fulfilled' as the final bulk label step"
+    )
 
 
 def test_return_label_flow():
