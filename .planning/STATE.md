@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 02-04 — carrier-aware _DECISION_PROMPT + _get_carrier_config_steps + expanded CARRIER-02 workflow guide
-last_updated: "2026-04-16T05:13:14.731Z"
+stopped_at: Completed 02-05 — _get_preconditions() with 4 carrier branches + precondition injection in _plan_scenario
+last_updated: "2026-04-16T05:18:29.884Z"
 last_activity: 2026-04-15 — 02-01 agent scaffold + Wave 0 stubs complete
 progress:
   total_phases: 4
   completed_phases: 0
   total_plans: 12
-  completed_plans: 7
+  completed_plans: 8
   percent: 33
 ---
 
@@ -57,6 +57,7 @@ Progress: [███░░░░░░░] 33%
 | Phase 02-ai-qa-agent-core P02 | 18 | 2 tasks | 2 files |
 | Phase 02-ai-qa-agent-core P03 | 7 | 2 tasks | 2 files |
 | Phase 02-ai-qa-agent-core P04 | 3 | 2 tasks | 2 files |
+| Phase 02-ai-qa-agent-core P05 | 3 | 1 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -90,6 +91,10 @@ Recent decisions affecting current work:
 - [Phase 02-ai-qa-agent-core]: 02-03: _DECISION_PROMPT explicitly forbids Shopify More Actions for MCSL label generation; uses _MCSL_WORKFLOW_GUIDE inline
 - [Phase 02-ai-qa-agent-core]: 02-04: Carrier context injected into _DECISION_PROMPT as well as _PLAN_PROMPT so agent is carrier-aware during every browser step
 - [Phase 02-ai-qa-agent-core]: 02-04: _get_carrier_config_steps returns a list for composability; _plan_scenario formats it inline when scenario matches CARRIER-02 keywords
+- [Phase 02-ai-qa-agent-core]: _SPECIAL_SERVICE_KEYWORDS frozenset added alongside _CARRIER_CONFIG_KEYWORDS for precondition detection
+- [Phase 02-ai-qa-agent-core]: preconditions_block appended to _PLAN_PROMPT string rather than adding a new format placeholder — avoids breaking existing prompt structure
+- [Phase 02-ai-qa-agent-core]: HAL and COD/insurance SideDock steps inserted at label_flow[5:] (before Generate Label click) to match live app flow
+- [Phase 02-ai-qa-agent-core]: DHL international commercial invoice verification appended after full label_flow (post-LABEL CREATED)
 
 ### Pending Todos
 
@@ -101,6 +106,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-16T05:13:14.729Z
-Stopped at: Completed 02-04 — carrier-aware _DECISION_PROMPT + _get_carrier_config_steps + expanded CARRIER-02 workflow guide
+Last session: 2026-04-16T05:18:29.881Z
+Stopped at: Completed 02-05 — _get_preconditions() with 4 carrier branches + precondition injection in _plan_scenario
 Resume file: None
