@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 03-04-PLAN.md — Document Verification Strategies DOC-01 through DOC-05 in _MCSL_WORKFLOW_GUIDE; all 5 doc tests active
-last_updated: "2026-04-16T11:18:18.032Z"
+stopped_at: Completed 03-05-PLAN.md — download_zip and download_file handlers fully implemented; DOC-02 functional
+last_updated: "2026-04-16T11:43:25.652Z"
 last_activity: 2026-04-16 — 03-02 Actions Menu Label + Return Label flows in guide, tests activated
 progress:
   total_phases: 4
   completed_phases: 1
   total_plans: 18
-  completed_plans: 14
+  completed_plans: 15
   percent: 38
 ---
 
@@ -64,6 +64,7 @@ Progress: [████░░░░░░] 38%
 | Phase 03-label-docs-pre-requirements P02 | 7 | 2 tasks | 2 files |
 | Phase 03-label-docs-pre-requirements P03 | 8 | 1 tasks | 2 files |
 | Phase 03-label-docs-pre-requirements P04 | 11 | 2 tasks | 2 files |
+| Phase 03-label-docs-pre-requirements P05 | 7 | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -116,6 +117,8 @@ Recent decisions affecting current work:
 - [Phase 03-label-docs-pre-requirements]: 03-04: DOC-04 explicitly warns NOT to use download_zip — Print Documents is a new-tab flow using switch_tab
 - [Phase 03-label-docs-pre-requirements]: 03-04: DOC-05 requires ViewallRateSummary expand FIRST — rate table is COLLAPSED by default, 3-dots invisible without expand
 - [Phase 03-label-docs-pre-requirements]: 03-04: DOC-03 uses MCSL-specific td:nth-child(8) 3-dots locator — FedEx How-To ZIP flow does NOT exist in MCSL
+- [Phase 03-label-docs-pre-requirements]: 03-05: download_zip uses page.expect_download() — Frame objects lack this method; only Page exposes it
+- [Phase 03-label-docs-pre-requirements]: 03-05: _verify_scenario had broken _zip_summary reference — replaced with _format_zip_for_context(action['_zip_content'])
 
 ### Pending Todos
 
@@ -127,6 +130,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-16T11:18:18.030Z
-Stopped at: Completed 03-04-PLAN.md — Document Verification Strategies DOC-01 through DOC-05 in _MCSL_WORKFLOW_GUIDE; all 5 doc tests active
+Last session: 2026-04-16T11:43:25.648Z
+Stopped at: Completed 03-05-PLAN.md — download_zip and download_file handlers fully implemented; DOC-02 functional
 Resume file: None
