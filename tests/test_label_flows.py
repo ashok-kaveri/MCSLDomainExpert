@@ -317,10 +317,60 @@ def test_doc03_how_to_zip():
     assert isinstance(content["report.csv"], str), "CSV content should be a string"
 
 
-@pytest.mark.skip(reason="Wave 0 stub — activated in later plans")
 def test_doc02_download_file_csv():
     """DOC-02 (file): download_file handler reads CSV content into _file_content."""
-    pass
+    import io
+    import tempfile, os, shutil
+    from unittest.mock import MagicMock, patch
+
+    # Build a CSV file in a temp location
+    csv_content = "col1,col2,col3\nrow1a,row1b,row1c\nrow2a,row2b,row2c\n"
+    tmp_dir = tempfile.mkdtemp(prefix="test_sav_file_")
+    csv_path = os.path.join(tmp_dir, "report.csv")
+    with open(csv_path, "w", encoding="utf-8") as f:
+        f.write(csv_content)
+
+    mock_download = MagicMock()
+    mock_download.suggested_filename = "report.csv"
+
+    def fake_save_as(path):
+        shutil.copy(csv_path, path)
+
+    mock_download.save_as.side_effect = fake_save_as
+
+    mock_dl_info = MagicMock()
+    mock_dl_info.__enter__ = MagicMock(return_value=mock_dl_info)
+    mock_dl_info.__exit__ = MagicMock(return_value=False)
+    mock_dl_info.value = mock_download
+
+    mock_frame = MagicMock()
+    mock_el = MagicMock()
+    mock_el.count.return_value = 1
+    mock_el.first = mock_el
+    mock_frame.get_by_role.return_value = mock_el
+
+    mock_page = MagicMock()
+    mock_page.frames = []
+    mock_page.expect_download.return_value = mock_dl_info
+    mock_page.get_by_role.return_value = mock_el
+
+    action = {"action": "download_file", "target": "Export CSV"}
+
+    with patch("pipeline.smart_ac_verifier._get_app_frame", return_value=mock_frame):
+        from pipeline.smart_ac_verifier import _do_action
+        result = _do_action(mock_page, action)
+
+    shutil.rmtree(tmp_dir, ignore_errors=True)
+
+    assert result is True, f"download_file _do_action should return True, got {result}"
+    assert "_file_content" in action, "action should have '_file_content' after download_file"
+    fc = action["_file_content"]
+    assert isinstance(fc, dict), f"_file_content should be a dict, got {type(fc)}"
+    assert "headers" in fc, f"_file_content must have 'headers' key, keys={list(fc.keys())}"
+    assert "row_count" in fc, f"_file_content must have 'row_count' key, keys={list(fc.keys())}"
+    assert "sample_rows" in fc, f"_file_content must have 'sample_rows' key, keys={list(fc.keys())}"
+    assert fc["headers"] == ["col1", "col2", "col3"], f"Unexpected headers: {fc['headers']}"
+    assert fc["row_count"] == 2, f"Expected 2 data rows, got {fc['row_count']}"
 
 
 def test_doc03_label_request_xml():
