@@ -508,6 +508,28 @@ Carrier codes: FedEx=C2, UPS=C3, DHL=C1, USPS/EasyPost=C22, Canada Post=C4
   - Verify fulfillment status shows "Fulfilled"
   - Verify tracking number has been added
   ⚠️ Do NOT create orders here for automation — use the API (order_creator.py)
+
+---
+
+## Document Verification Strategies
+
+After label generation, use one or more of the following strategies to gather evidence.
+
+### DOC-01: Label Existence Badge Check
+After "Generate Label" click, verify status reaches LABEL CREATED:
+- Status span: div[class="order-summary-greyBlock"] > div:nth-child(1) > div:nth-child(1) > div > span
+- Status button (for polling): getByRole('button').nth(2) shows "LABEL CREATED"
+- Label Summary table visible: getByText('Label Summary')
+- SUCCESS cell visible: getByRole('cell', name='SUCCESS').first()
+
+### DOC-04: Print Documents (New Tab Screenshot)
+⚠️ IMPORTANT: Print Documents opens a NEW TAB — do NOT use download_zip here.
+Steps:
+1. Click "Print Documents" button on Order Summary (standalone button)
+2. New tab opens at *.pluginhive.io domain
+3. action: switch_tab → active_page = new tab
+4. Take screenshot → Claude reads label service codes visible on label (ICE, ALCOHOL, ELB, ASR, DSR)
+5. action: close_tab → returns to Order Summary
 """)
 
 
