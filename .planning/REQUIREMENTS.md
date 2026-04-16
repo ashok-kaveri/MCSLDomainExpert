@@ -27,8 +27,8 @@
 
 ### AI QA Agent — Multi-Carrier
 
-- [ ] **CARRIER-01**: Agent is carrier-aware — carrier name injected into planning prompt from AC text detection
-- [ ] **CARRIER-02**: Agent handles carrier account configuration flow (App Settings → Carriers → Add/Edit)
+- [x] **CARRIER-01**: Agent is carrier-aware — carrier name injected into planning prompt from AC text detection
+- [x] **CARRIER-02**: Agent handles carrier account configuration flow (App Settings → Carriers → Add/Edit)
 - [ ] **CARRIER-03**: Agent handles FedEx-specific flows (signature, dry ice, alcohol, battery, HAL, insurance)
 - [ ] **CARRIER-04**: Agent handles UPS-specific flows (signature, insurance, COD)
 - [ ] **CARRIER-05**: Agent handles USPS-specific flows (signature, registered mail)
@@ -123,8 +123,8 @@
 | AGENT-05 | Phase 2 | Complete |
 | AGENT-06 | Phase 2 | Pending |
 | AGENT-07 | Phase 2 | Pending |
-| CARRIER-01 | Phase 2 | Pending |
-| CARRIER-02 | Phase 2 | Pending |
+| CARRIER-01 | Phase 2 | Complete |
+| CARRIER-02 | Phase 2 | Complete |
 | CARRIER-03 | Phase 2 | Pending |
 | CARRIER-04 | Phase 2 | Pending |
 | CARRIER-05 | Phase 2 | Pending |

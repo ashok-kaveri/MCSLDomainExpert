@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 02-03 — _do_action (11 handlers) + _decide_next + _DECISION_PROMPT
-last_updated: "2026-04-16T05:08:18.522Z"
+stopped_at: Completed 02-04 — carrier-aware _DECISION_PROMPT + _get_carrier_config_steps + expanded CARRIER-02 workflow guide
+last_updated: "2026-04-16T05:13:14.731Z"
 last_activity: 2026-04-15 — 02-01 agent scaffold + Wave 0 stubs complete
 progress:
   total_phases: 4
   completed_phases: 0
   total_plans: 12
-  completed_plans: 6
+  completed_plans: 7
   percent: 33
 ---
 
@@ -56,6 +56,7 @@ Progress: [███░░░░░░░] 33%
 | Phase 02-ai-qa-agent-core P01 | 5 | 2 tasks | 2 files |
 | Phase 02-ai-qa-agent-core P02 | 18 | 2 tasks | 2 files |
 | Phase 02-ai-qa-agent-core P03 | 7 | 2 tasks | 2 files |
+| Phase 02-ai-qa-agent-core P04 | 3 | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -87,6 +88,8 @@ Recent decisions affecting current work:
 - [Phase 02-ai-qa-agent-core]: 02-03: download_zip and download_file are Phase 2 stubs (log + return False) — full implementation deferred to Phase 3
 - [Phase 02-ai-qa-agent-core]: 02-03: _decide_next falls back to qa_needed when Claude returns unparseable or missing-action JSON response
 - [Phase 02-ai-qa-agent-core]: 02-03: _DECISION_PROMPT explicitly forbids Shopify More Actions for MCSL label generation; uses _MCSL_WORKFLOW_GUIDE inline
+- [Phase 02-ai-qa-agent-core]: 02-04: Carrier context injected into _DECISION_PROMPT as well as _PLAN_PROMPT so agent is carrier-aware during every browser step
+- [Phase 02-ai-qa-agent-core]: 02-04: _get_carrier_config_steps returns a list for composability; _plan_scenario formats it inline when scenario matches CARRIER-02 keywords
 
 ### Pending Todos
 
@@ -98,6 +101,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-16T05:08:18.518Z
-Stopped at: Completed 02-03 — _do_action (11 handlers) + _decide_next + _DECISION_PROMPT
+Last session: 2026-04-16T05:13:14.729Z
+Stopped at: Completed 02-04 — carrier-aware _DECISION_PROMPT + _get_carrier_config_steps + expanded CARRIER-02 workflow guide
 Resume file: None
