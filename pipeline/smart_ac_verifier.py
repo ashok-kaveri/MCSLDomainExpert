@@ -446,6 +446,18 @@ To verify fulfillment status and tracking number in Shopify:
 6. Wait for SUCCESS status in batch grid
 7. Click "Mark as Fulfilled"
 
+### Return Label Flow (LABEL-04)
+⚠️ REQUIRES an already-FULFILLED order. Use order_action: existing_fulfilled in plan.
+1. Click "ORDERS" tab → All Orders grid
+2. Add filter: Order Id → type order ID → press Escape
+3. Click header checkbox (same as Actions Menu Label flow)
+4. Click Actions button (div[class="buttons-row"] > button:nth-child(4))
+5. In Actions search → type "Create Return Label" → click menuitem "Create Return Label"
+   → Return Label modal opens (header text = "Return Label")
+6. Click Submit button
+7. Verify order row status column = "Return Created"
+   (locator: #all-order-table table tbody tr:first → td:nth-child(11))
+
 ### TWO DIFFERENT PRODUCT PAGES — DO NOT CONFUSE
 
 ❶  navigate: "appproducts"  →  hamburger → Products
