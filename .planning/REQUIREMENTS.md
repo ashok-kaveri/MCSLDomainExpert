@@ -46,7 +46,7 @@
 
 - [ ] **DOC-01**: Agent verifies label existence via "label generated" badge on Order Summary
 - [ ] **DOC-02**: Agent verifies physical docs via More Actions → Download Documents (ZIP → read PDFs/files)
-- [ ] **DOC-03**: Agent verifies JSON request fields via More Actions → How To → Click Here (ZIP → createShipment JSON)
+- [ ] **DOC-03**: Agent verifies label request XML/JSON fields via Label Summary 3-dots (⋯) → View Log → `.dialogHalfDivParent` dialog → read text content
 - [ ] **DOC-04**: Agent verifies visual label codes via Print Documents → switch_tab → screenshot → read codes → close_tab
 - [ ] **DOC-05**: Agent views rate logs via ⋯ → View Logs → screenshot dialog (before label generation)
 
