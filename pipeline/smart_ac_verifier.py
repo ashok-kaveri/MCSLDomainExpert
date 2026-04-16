@@ -1407,8 +1407,9 @@ def _verify_scenario(
 
 def verify_ac(
     ac_text: str,
-    card_name: str,
+    card_name: str = "",
     stop_flag: "Callable[[], bool] | None" = None,
+    headless: bool = False,
     app_url: str = "",
     progress_cb: "Callable[[int, str, int, str], None] | None" = None,
     qa_answers: "dict[str, str] | None" = None,
@@ -1416,38 +1417,53 @@ def verify_ac(
 ) -> VerificationReport:
     """Verify AC scenarios for a card against the live MCSL Shopify app.
 
+    Main entry point. Extracts scenarios from AC text and verifies each one
+    using the agentic browser loop.
+
     Args:
         ac_text:        Full AC markdown text
         card_name:      Feature / card title
-        stop_flag:      Optional callable — returns True to abort after current scenario
+        stop_flag:      Optional callable — returns True to abort before next scenario
+        headless:       Run browser headless (default False)
         app_url:        Full MCSL app URL in Shopify admin (auto-built from config.STORE if empty)
         progress_cb:    Optional callback(scenario_idx, scenario_title, step_num, step_desc)
         qa_answers:     {scenario_text: qa_answer} for stuck scenarios
         max_scenarios:  Cap number of scenarios tested (None = test all)
 
     Returns:
-        VerificationReport with per-scenario results
+        VerificationReport with per-scenario results (even if all fail or stop_flag triggers)
     """
     if not app_url:
         store = getattr(config, "STORE", "")
         if store:
             app_url = f"https://admin.shopify.com/store/{store}/apps/mcsl-qa"
 
+    report = VerificationReport(card_name=card_name, app_url=app_url)
+    start = time.time()
+
     if not ac_text:
-        return VerificationReport(card_name=card_name, app_url=app_url)
+        report.duration_seconds = time.time() - start
+        return report
 
-    if not getattr(config, "ANTHROPIC_API_KEY", ""):
-        raise RuntimeError("ANTHROPIC_API_KEY not set in .env")
-
+    # Initialise Claude (ANTHROPIC_API_KEY validated at runtime — missing key raises here)
     claude = ChatAnthropic(
-        model=config.CLAUDE_SONNET_MODEL,
-        api_key=config.ANTHROPIC_API_KEY,
-        temperature=0.1,
+        model=getattr(config, "CLAUDE_SONNET_MODEL", "claude-sonnet-4-5"),
+        api_key=getattr(config, "ANTHROPIC_API_KEY", ""),
         max_tokens=4096,
     )
 
-    report    = VerificationReport(card_name=card_name, app_url=app_url)
-    scenarios = _extract_scenarios(ac_text, claude)
+    # Extract scenarios
+    try:
+        scenarios = _extract_scenarios(ac_text, claude)
+    except Exception as e:
+        logger.error(f"Scenario extraction failed: {e}")
+        report.duration_seconds = time.time() - start
+        return report
+
+    if not scenarios:
+        logger.warning("No scenarios extracted from AC text")
+        report.duration_seconds = time.time() - start
+        return report
 
     if max_scenarios and max_scenarios < len(scenarios):
         scenarios = scenarios[:max_scenarios]
@@ -1455,34 +1471,55 @@ def verify_ac(
     else:
         logger.info("verify_ac: %d scenarios for '%s'", len(scenarios), card_name)
 
-    for idx, scenario in enumerate(scenarios):
-        if stop_flag and stop_flag():
-            logger.info("verify_ac: stopped by user after %d scenarios", idx)
-            break
+    # Launch browser
+    pw, browser, ctx, page = _launch_browser(headless=headless)
 
-        logger.info("[%d/%d] Verifying: %s", idx + 1, len(scenarios), scenario[:70])
+    try:
+        for idx, scenario in enumerate(scenarios):
+            # Check stop flag BEFORE each scenario
+            if stop_flag and stop_flag():
+                logger.info(f"Stop flag triggered before scenario {idx + 1} — halting")
+                break
 
-        if progress_cb:
-            progress_cb(idx + 1, scenario, 0, "Asking domain expert…")
+            logger.info("[%d/%d] Verifying: %s", idx + 1, len(scenarios), scenario[:70])
 
-        expert_insight = _ask_domain_expert(scenario, card_name, claude)
-        code_ctx       = _code_context(scenario, card_name)
-        plan_data      = _plan_scenario(scenario, app_url, code_ctx, expert_insight, claude)
+            if progress_cb:
+                progress_cb(idx + 1, scenario, 0, "Asking domain expert…")
 
-        # Browser loop — stub until plan 02-02 implements _verify_scenario
-        sv = _verify_scenario(
-            page=None,
-            scenario=scenario,
-            card_name=card_name,
-            app_base=app_url,
-            plan_data=plan_data,
-            ctx=code_ctx,
-            claude=claude,
-            progress_cb=None,
-            qa_answer=(qa_answers or {}).get(scenario, ""),
-            first_scenario=(idx == 0),
-            expert_insight=expert_insight,
-        )
-        report.scenarios.append(sv)
+            try:
+                expert_insight = _ask_domain_expert(scenario, card_name, claude)
+                code_ctx       = _code_context(scenario, card_name)
+                plan_data      = _plan_scenario(scenario, app_url, code_ctx, expert_insight, claude)
 
+                sv = _verify_scenario(
+                    page=page,
+                    scenario=scenario,
+                    card_name=card_name,
+                    app_base=app_url,
+                    plan_data=plan_data,
+                    ctx=code_ctx,
+                    claude=claude,
+                    progress_cb=None,
+                    qa_answer=(qa_answers or {}).get(scenario, ""),
+                    first_scenario=(idx == 0),
+                    expert_insight=expert_insight,
+                    stop_flag=stop_flag,
+                )
+            except Exception as e:
+                logger.error(f"Scenario {idx + 1} failed with exception: {e}")
+                sv = ScenarioResult(
+                    scenario=scenario,
+                    status="fail",
+                    finding=f"Agent exception: {e}",
+                )
+
+            report.scenarios.append(sv)
+            logger.info(f"Scenario {idx + 1} result: {sv.status} — {sv.finding[:80]}")
+
+    finally:
+        browser.close()
+        pw.stop()
+
+    report.duration_seconds = time.time() - start
+    logger.info(f"Verification complete: {report.summary} in {report.duration_seconds:.1f}s")
     return report
