@@ -175,10 +175,24 @@ def test_doc01_badge_check():
     )
 
 
-@pytest.mark.skip(reason="Wave 0 stub — activated in later plans")
 def test_doc02_download_zip():
-    """DOC-02: download_zip handler intercepts download, extracts ZIP, sets _zip_content."""
-    pass
+    """DOC-02: _MCSL_WORKFLOW_GUIDE documents Download Documents ZIP strategy."""
+    from pipeline.smart_ac_verifier import _MCSL_WORKFLOW_GUIDE
+
+    # Guide must mention Download Documents button
+    assert "Download Documents" in _MCSL_WORKFLOW_GUIDE, (
+        "_MCSL_WORKFLOW_GUIDE must mention 'Download Documents' button"
+    )
+
+    # Guide must reference download_zip action
+    assert "download_zip" in _MCSL_WORKFLOW_GUIDE, (
+        "_MCSL_WORKFLOW_GUIDE DOC-02 must reference 'download_zip' action"
+    )
+
+    # Guide must mention _zip_content result
+    assert "_zip_content" in _MCSL_WORKFLOW_GUIDE, (
+        "_MCSL_WORKFLOW_GUIDE DOC-02 must mention '_zip_content' to indicate where results are stored"
+    )
 
 
 @pytest.mark.skip(reason="Wave 0 stub — activated in later plans")
@@ -187,10 +201,29 @@ def test_doc02_download_file_csv():
     pass
 
 
-@pytest.mark.skip(reason="Wave 0 stub — activated in later plans")
 def test_doc03_label_request_xml():
-    """DOC-03: How To ZIP download — download_zip target='Click Here' → JSON in _zip_content."""
-    pass
+    """DOC-03: _MCSL_WORKFLOW_GUIDE documents Label Request XML/JSON via 3-dots on Label Summary row."""
+    from pipeline.smart_ac_verifier import _MCSL_WORKFLOW_GUIDE
+
+    # Guide must reference Label Summary table (where the 3-dots are)
+    assert "Label Summary" in _MCSL_WORKFLOW_GUIDE, (
+        "_MCSL_WORKFLOW_GUIDE DOC-03 must reference 'Label Summary' table"
+    )
+
+    # Guide must reference td:nth-child(8) 3-dots locator or a named reference to it
+    assert "td:nth-child(8)" in _MCSL_WORKFLOW_GUIDE or "3-dots" in _MCSL_WORKFLOW_GUIDE or "click3Dots" in _MCSL_WORKFLOW_GUIDE, (
+        "_MCSL_WORKFLOW_GUIDE DOC-03 must reference the 3-dots locator on Label Summary row"
+    )
+
+    # Guide must mention View Log menuitem
+    assert "View Log" in _MCSL_WORKFLOW_GUIDE, (
+        "_MCSL_WORKFLOW_GUIDE DOC-03 must mention 'View Log' menuitem"
+    )
+
+    # Guide must mention dialogHalfDivParent dialog
+    assert "dialogHalfDivParent" in _MCSL_WORKFLOW_GUIDE, (
+        "_MCSL_WORKFLOW_GUIDE DOC-03 must mention '.dialogHalfDivParent' dialog locator"
+    )
 
 
 def test_doc04_print_documents():
@@ -213,10 +246,24 @@ def test_doc04_print_documents():
     )
 
 
-@pytest.mark.skip(reason="Wave 0 stub — activated in later plans")
 def test_doc05_rate_log():
-    """DOC-05: Rate log — ViewallRateSummary → 3-dots → View Log → dialogHalfDivParent."""
-    pass
+    """DOC-05: _MCSL_WORKFLOW_GUIDE documents rate log strategy with ViewallRateSummary expand step."""
+    from pipeline.smart_ac_verifier import _MCSL_WORKFLOW_GUIDE
+
+    # Guide must reference ViewallRateSummary expand step
+    assert "ViewallRateSummary" in _MCSL_WORKFLOW_GUIDE or "View all Rate Summary" in _MCSL_WORKFLOW_GUIDE, (
+        "_MCSL_WORKFLOW_GUIDE DOC-05 must reference 'ViewallRateSummary' or 'View all Rate Summary' expand step"
+    )
+
+    # Guide must mention dialogHalfDivParent dialog
+    assert "dialogHalfDivParent" in _MCSL_WORKFLOW_GUIDE, (
+        "_MCSL_WORKFLOW_GUIDE DOC-05 must reference '.dialogHalfDivParent' dialog locator"
+    )
+
+    # Guide must note that table must be expanded BEFORE clicking 3-dots
+    assert "FIRST" in _MCSL_WORKFLOW_GUIDE or "expand" in _MCSL_WORKFLOW_GUIDE.lower() or "COLLAPSED" in _MCSL_WORKFLOW_GUIDE or "collapsed" in _MCSL_WORKFLOW_GUIDE, (
+        "_MCSL_WORKFLOW_GUIDE DOC-05 must note that the rate table must be expanded before clicking 3-dots"
+    )
 
 
 @pytest.mark.skip(reason="Wave 0 stub — activated in later plans")
