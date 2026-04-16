@@ -425,3 +425,58 @@ def test_verdict_reporting():
     s = ScenarioResult(scenario="Test scenario")
     assert s.status == "pending"
     assert hasattr(s, "carrier")
+
+
+def test_full_report_integration():
+    """Constructs a VerificationReport with 2 scenarios and asserts to_dict() structure."""
+    from pipeline.smart_ac_verifier import VerificationReport, ScenarioResult
+
+    report = VerificationReport(
+        card_name="Test Card",
+        scenarios=[
+            ScenarioResult(
+                scenario="When FedEx account is configured, label is generated successfully",
+                carrier="FedEx",
+                status="pass",
+                finding="",
+                evidence_screenshot="",
+            ),
+            ScenarioResult(
+                scenario="When UPS account has invalid credentials, error message is shown",
+                carrier="UPS",
+                status="fail",
+                finding="Error modal not found after 15 steps",
+                evidence_screenshot="",
+            ),
+        ],
+        duration_seconds=12.5,
+    )
+
+    result = report.to_dict()
+
+    # Top-level keys
+    assert "card_name" in result
+    assert "total" in result
+    assert "summary" in result
+    assert "duration_seconds" in result
+    assert "scenarios" in result
+
+    # Counts
+    assert result["total"] == 2
+    assert result["summary"]["pass"] == 1
+    assert result["summary"]["fail"] == 1
+    assert result["summary"]["partial"] == 0
+    assert result["summary"]["qa_needed"] == 0
+    assert result["duration_seconds"] == 12.5
+
+    # Per-scenario keys
+    for s in result["scenarios"]:
+        assert "scenario" in s
+        assert "status" in s
+        assert "finding" in s
+        assert "steps_taken" in s
+        assert "carrier" in s
+
+    # Pass finding defaults to "Scenario passed" when empty
+    pass_scenario = next(s for s in result["scenarios"] if s["status"] == "pass")
+    assert pass_scenario["finding"] == "Scenario passed"
