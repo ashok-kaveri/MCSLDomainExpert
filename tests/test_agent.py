@@ -67,26 +67,95 @@ def test_build_execution_plan():
     assert "carrier" in result
 
 
-@pytest.mark.skip(reason="Wave 0 stub — AGENT-04")
 def test_browser_loop_scaffold():
-    """AGENT-04: Agent runs agentic browser loop up to MAX_STEPS."""
-    try:
-        from pipeline.smart_ac_verifier import _verify_scenario
-    except ImportError:
-        pytest.skip("pipeline.smart_ac_verifier not yet implemented")
-    # stub — no browser launched in unit tests
-    assert True
+    """AGENT-04: _verify_scenario runs agentic loop, respects stop_flag, returns ScenarioResult."""
+    from pipeline.smart_ac_verifier import _verify_scenario, ScenarioResult, MAX_STEPS
+    from unittest.mock import MagicMock, patch
+
+    # Build a minimal mock page
+    mock_page = MagicMock()
+    mock_page.url = "https://example.com"
+    mock_page.frames = []
+    mock_page.main_frame = MagicMock()
+    mock_page.accessibility.snapshot.return_value = None
+    mock_page.screenshot.return_value = b"fake_png"
+    mock_page.evaluate.return_value = []
+
+    plan_data = {"carrier": "FedEx", "api_to_watch": [], "nav_clicks": []}
+
+    # Case 1: _decide_next immediately returns verify → status="pass"
+    verify_action = {"action": "verify", "verdict": "pass", "finding": "label found"}
+    with patch("pipeline.smart_ac_verifier._decide_next", return_value=verify_action):
+        result = _verify_scenario(
+            page=mock_page,
+            scenario="FedEx label is generated",
+            card_name="Label Generation",
+            app_base="https://example.com",
+            plan_data=plan_data,
+        )
+    assert isinstance(result, ScenarioResult)
+    assert result.status == "pass"
+    assert result.finding == "label found"
+
+    # Case 2: stop_flag=True → status="partial", early exit
+    with patch("pipeline.smart_ac_verifier._decide_next", return_value=verify_action):
+        result_stopped = _verify_scenario(
+            page=mock_page,
+            scenario="FedEx label is generated",
+            card_name="Label Generation",
+            app_base="https://example.com",
+            plan_data=plan_data,
+            stop_flag=lambda: True,
+        )
+    assert result_stopped.status == "partial"
+    assert "Stopped" in result_stopped.finding
 
 
-@pytest.mark.skip(reason="Wave 0 stub — AGENT-05")
 def test_ax_tree_capture():
     """AGENT-05: Agent captures AX tree (depth 6, 250 lines) + screenshot + network calls per step."""
-    try:
-        from pipeline.smart_ac_verifier import _ax_tree
-    except ImportError:
-        pytest.skip("pipeline.smart_ac_verifier not yet implemented")
-    # stub — no browser launched in unit tests
-    assert True
+    from pipeline.smart_ac_verifier import _ax_tree, _screenshot, _network
+    from unittest.mock import MagicMock, PropertyMock
+
+    # -- _ax_tree: mock page with one app iframe --
+    mock_frame = MagicMock()
+    mock_frame.url = "https://admin.shopify.com/store/test/apps/mcsl-qa/shopify"
+    mock_frame.accessibility.snapshot.return_value = {
+        "role": "button",
+        "name": "Generate Label",
+        "children": [],
+    }
+
+    mock_page = MagicMock()
+    mock_page.accessibility.snapshot.return_value = {
+        "role": "button",
+        "name": "Main Nav Button",
+        "children": [],
+    }
+    # main_frame is a different object so the identity check works
+    mock_page.main_frame = MagicMock()
+    mock_page.frames = [mock_page.main_frame, mock_frame]
+
+    result = _ax_tree(mock_page)
+    assert isinstance(result, str)
+    assert len(result) > 0
+    assert "--- [APP IFRAME:" in result, f"Expected APP IFRAME header in ax_tree output, got: {result!r}"
+
+    # -- _screenshot: returns non-empty base64 string --
+    mock_page2 = MagicMock()
+    mock_page2.screenshot.return_value = b"\x89PNG\r\n\x1a\nfake_png_bytes"
+    scr = _screenshot(mock_page2)
+    assert isinstance(scr, str)
+    assert len(scr) > 0
+    import base64
+    base64.b64decode(scr)  # must not raise
+
+    # -- _network: returns a string (may be empty when no matches) --
+    mock_page3 = MagicMock()
+    mock_page3.evaluate.return_value = []
+    mock_page3.main_frame = MagicMock()
+    mock_page3.frames = [mock_page3.main_frame]
+    net = _network(mock_page3, ["/api/orders"])
+    assert isinstance(net, str)
 
 
 @pytest.mark.skip(reason="Wave 0 stub — AGENT-06")

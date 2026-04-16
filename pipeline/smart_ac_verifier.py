@@ -169,12 +169,15 @@ Label status locator (inside iframe):
 @dataclass
 class VerificationStep:
     """A single step in the agentic verification loop."""
-    action: str
-    description: str
+    action: str = ""
+    description: str = ""
     target: str = ""
     success: bool = True
     screenshot_b64: str = ""
     network_calls: list[str] = field(default_factory=list)
+    # Extended fields used by the 02-02 agentic loop
+    step_num: int = 0
+    ax_tree: str = ""
 
 
 # Alias used in test stubs — plans 02-02/03 use VerificationStep directly
@@ -187,6 +190,8 @@ class ScenarioResult:
     scenario: str
     status: str = "pending"          # pass | fail | partial | skipped | qa_needed
     verdict: str = ""
+    finding: str = ""                # human-readable verdict text from verify/qa_needed actions
+    evidence_screenshot: str = ""   # base64 PNG of the final state when verdict reached
     steps: list[VerificationStep] = field(default_factory=list)
     qa_question: str = ""
     bug_report: dict = field(default_factory=dict)
@@ -671,15 +676,42 @@ def _decide_next(
     scenario: str,
     url: str,
     ax: str,
-    net: list[str],
+    net_seen: list[str],
     steps: list[VerificationStep],
     ctx: str,
     step_num: int,
     scr: str = "",
     expert_insight: str = "",
 ) -> dict:
-    """Stub: ask Claude for the next action. Implemented in plan 02-02."""
-    return {"action": "qa_needed", "description": "Browser loop not yet implemented"}
+    """Stub: ask Claude what action to take next. Replaced by real Claude invocation in plan 02-03."""
+    return {"action": "qa_needed", "finding": "Not yet implemented"}
+
+
+def _launch_browser(headless: bool = False):
+    """Launch a Chromium browser with anti-bot args and auth.json storage state.
+
+    Returns:
+        (playwright_instance, browser, context, page) tuple.
+    """
+    from playwright.sync_api import sync_playwright  # local import — only needed at runtime
+
+    pw = sync_playwright().start()
+    browser = pw.chromium.launch(
+        channel="chrome",
+        headless=headless,
+        args=_ANTI_BOT_ARGS,
+    )
+    ctx_kwargs: dict = {"viewport": {"width": 1400, "height": 1000}}
+    if _AUTH_JSON.exists():
+        try:
+            json.loads(_AUTH_JSON.read_text(encoding="utf-8"))
+            ctx_kwargs["storage_state"] = str(_AUTH_JSON)
+        except Exception:
+            pass
+    context = browser.new_context(**ctx_kwargs)
+    page = context.new_page()
+    page.set_default_timeout(30_000)
+    return pw, browser, context, page
 
 
 def _verify_scenario(
@@ -694,15 +726,78 @@ def _verify_scenario(
     qa_answer: str = "",
     first_scenario: bool = False,
     expert_insight: str = "",
+    stop_flag: "Callable[[], bool] | None" = None,
 ) -> ScenarioResult:
-    """Stub: run the agentic browser loop for one scenario. Implemented in plan 02-02."""
+    """Run the agentic browser loop for one scenario — up to MAX_STEPS iterations.
+
+    Each step:
+      1. Captures AX tree (dual-frame), screenshot, and filtered network calls
+      2. Calls _decide_next (Claude) to choose an action
+      3. Executes the action via _do_action
+      4. Breaks on 'verify' (verdict reached) or 'qa_needed' (needs human)
+
+    active_page tracks tab switches — updated when action contains '_new_page'.
+    """
     carrier_name, _ = _detect_carrier(scenario)
-    return ScenarioResult(
-        scenario=scenario,
-        status="qa_needed",
-        verdict="Browser loop not yet implemented — plan 02-02",
-        carrier=carrier_name,
-    )
+    result = ScenarioResult(scenario=scenario, carrier=plan_data.get("carrier", carrier_name))
+    active_page = page
+    zip_ctx = ""
+    net_seen: list[str] = []
+    api_endpoints: list[str] = plan_data.get("api_to_watch", [])
+
+    for step_num in range(1, MAX_STEPS + 1):
+        if stop_flag and stop_flag():
+            result.status = "partial"
+            result.finding = "Stopped by user"
+            break
+
+        ax  = _ax_tree(active_page)
+        scr = _screenshot(active_page)
+        net = _network(active_page, api_endpoints)
+        if net:
+            net_seen.append(net)
+
+        effective_ctx = f"{zip_ctx}\n{ctx}" if zip_ctx else ctx
+        step = StepResult(step_num=step_num, ax_tree=ax, screenshot_b64=scr)
+
+        action = _decide_next(
+            claude, scenario, active_page.url, ax,
+            net_seen, result.steps, effective_ctx,
+            step_num, scr=scr, expert_insight=expert_insight,
+        )
+        atype = action.get("action", "observe")
+        step.action = atype
+        step.description = action.get("description", atype)
+        step.target = action.get("target", "")
+        step.success = _do_action(active_page, action, app_base)
+        result.steps.append(step)
+
+        logger.info("[step %d/%d] action=%-12s target=%-30s | %s",
+                    step_num, MAX_STEPS, atype, step.target[:30], step.description[:80])
+
+        if atype == "verify":
+            result.status = action.get("verdict", "partial")
+            result.finding = action.get("finding", "")
+            result.evidence_screenshot = scr
+            break
+
+        if atype == "qa_needed":
+            result.status = "qa_needed"
+            result.finding = action.get("question", action.get("finding", ""))
+            result.qa_question = result.finding
+            break
+
+        if "_new_page" in action:
+            active_page = action["_new_page"]
+
+        if "_zip_content" in action:
+            zip_ctx = action.get("_zip_summary", "")
+
+    else:
+        result.status = "partial"
+        result.finding = f"Loop completed {MAX_STEPS} steps without verdict"
+
+    return result
 
 
 # ── Entry point ────────────────────────────────────────────────────────────────
