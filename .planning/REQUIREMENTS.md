@@ -36,11 +36,11 @@
 
 ### AI QA Agent — Label Generation
 
-- [ ] **LABEL-01**: Agent handles Manual Label flow (Shopify Orders → order → More Actions → Generate Label → Get Rates → select service → SideDock → Generate)
+- [x] **LABEL-01**: Agent handles Manual Label flow (Shopify Orders → order → More Actions → Generate Label → Get Rates → select service → SideDock → Generate)
 - [ ] **LABEL-02**: Agent handles Auto-Generate Label flow (More Actions → Auto-Generate Label)
 - [ ] **LABEL-03**: Agent handles Bulk Label generation (Orders list → select all → Actions → Generate Labels)
 - [ ] **LABEL-04**: Agent handles Return Label flow (Order Summary → Return packages → Generate Return Label)
-- [ ] **LABEL-05**: Agent creates test orders via Shopify REST API (single + bulk, reads mcsl-test-automation productsconfig.json + addressconfig.json)
+- [x] **LABEL-05**: Agent creates test orders via Shopify REST API (single + bulk, reads mcsl-test-automation productsconfig.json + addressconfig.json)
 
 ### AI QA Agent — Document Verification
 
@@ -129,11 +129,11 @@
 | CARRIER-04 | Phase 2 | Complete |
 | CARRIER-05 | Phase 2 | Complete |
 | CARRIER-06 | Phase 2 | Complete |
-| LABEL-01 | Phase 3 | Pending |
+| LABEL-01 | Phase 3 | Complete |
 | LABEL-02 | Phase 3 | Pending |
 | LABEL-03 | Phase 3 | Pending |
 | LABEL-04 | Phase 3 | Pending |
-| LABEL-05 | Phase 3 | Pending |
+| LABEL-05 | Phase 3 | Complete |
 | DOC-01 | Phase 3 | Pending |
 | DOC-02 | Phase 3 | Pending |
 | DOC-03 | Phase 3 | Pending |

@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 02-07-PLAN.md — verify_ac() wired with stop_flag + VerificationReport.to_dict(); Phase 2 complete
-last_updated: "2026-04-16T05:59:18.345Z"
-last_activity: 2026-04-15 — 02-01 agent scaffold + Wave 0 stubs complete
+stopped_at: Completed 03-01-PLAN.md — Wave 0 test scaffold + Manual Label flow + dangerous products support
+last_updated: "2026-04-16T00:18:00.000Z"
+last_activity: 2026-04-16 — 03-01 Wave 0 test scaffold + _MCSL_WORKFLOW_GUIDE 8-step Manual flow + use_dangerous_products wired
 progress:
   total_phases: 4
   completed_phases: 1
   total_plans: 12
-  completed_plans: 10
-  percent: 33
+  completed_plans: 11
+  percent: 38
 ---
 
 # Project State
@@ -25,12 +25,12 @@ See: .planning/PROJECT.md (updated 2026-04-15)
 
 ## Current Position
 
-Phase: 2 of 4 (AI QA Agent Core)
-Plan: 1 of 7 in current phase (02-01 complete)
+Phase: 3 of 4 (Label + Docs + Pre-Requirements)
+Plan: 1 of 6 in current phase (03-01 complete)
 Status: In progress
-Last activity: 2026-04-15 — 02-01 agent scaffold + Wave 0 stubs complete
+Last activity: 2026-04-16 — 03-01 Wave 0 test scaffold + Manual Label flow + dangerous products
 
-Progress: [███░░░░░░░] 33%
+Progress: [████░░░░░░] 38%
 
 ## Performance Metrics
 
@@ -60,6 +60,7 @@ Progress: [███░░░░░░░] 33%
 | Phase 02-ai-qa-agent-core P05 | 3 | 1 tasks | 1 files |
 | Phase 02-ai-qa-agent-core P06 | 25 | 2 tasks | 3 files |
 | Phase 02-ai-qa-agent-core P07 | 8 | 2 tasks | 2 files |
+| Phase 03-label-docs-pre-requirements P01 | 18 | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -102,6 +103,9 @@ Recent decisions affecting current work:
 - [Phase 02-ai-qa-agent-core]: VerificationReport gains to_dict(), duration_seconds, and summary property dict for Phase 4 Streamlit dashboard
 - [Phase 02-ai-qa-agent-core]: verify_ac() now calls _launch_browser() and closes browser in finally block — removes page=None stub from plans 02-01/02
 - [Phase 02-ai-qa-agent-core]: ANTHROPIC_API_KEY pre-check removed from verify_ac() — ChatAnthropic constructor validates at runtime, allows test patching
+- [Phase 03-label-docs-pre-requirements]: 03-01: test_manual_label_flow_plan verifies _MCSL_WORKFLOW_GUIDE string content directly — validates guide without network calls
+- [Phase 03-label-docs-pre-requirements]: 03-01: _MCSL_WORKFLOW_GUIDE Label Generation Flow expanded to 8 explicit steps — step 8 adds Label Summary SUCCESS cell verification
+- [Phase 03-label-docs-pre-requirements]: 03-01: create_bulk_orders gets use_dangerous_products param; _verify_scenario reads plan_data["dangerous_products"] to select product source
 
 ### Pending Todos
 
