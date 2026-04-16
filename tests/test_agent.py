@@ -160,7 +160,7 @@ def test_ax_tree_capture():
 
 def test_action_handlers():
     """AGENT-06: _do_action handles all 11 action types without raising unhandled exceptions."""
-    from pipeline.smart_ac_verifier import _do_action, _build_url_map
+    from pipeline.smart_ac_verifier import _do_action, _navigate_in_app
     from unittest.mock import MagicMock, patch
 
     app_base = "https://admin.shopify.com/store/mcsl-qa-store/apps/mcsl-qa"
@@ -179,11 +179,13 @@ def test_action_handlers():
     # qa_needed → True
     assert _do_action(mock_page, {"action": "qa_needed", "question": "?"}, app_base) is True
 
-    # navigate with named URL key → calls page.goto with URL containing app_base domain
-    _do_action(mock_page, {"action": "navigate", "url": "shipping"}, app_base)
+    # navigate with named destination → delegates to _navigate_in_app (click-based, returns bool)
+    # "shopifyorders" is the only destination that calls page.goto (leaves the app)
+    result_nav = _do_action(mock_page, {"action": "navigate", "url": "shopifyorders"}, app_base)
+    assert isinstance(result_nav, bool)
     assert mock_page.goto.called
     call_url = mock_page.goto.call_args[0][0]
-    assert "mcsl-qa" in call_url or "admin.shopify.com" in call_url
+    assert "admin.shopify.com" in call_url
 
     # download_zip → False (Phase 2 stub)
     result_zip = _do_action(mock_page, {"action": "download_zip", "url": "http://example.com/file.zip"}, app_base)

@@ -294,19 +294,88 @@ def _get_preconditions(carrier_name: str, scenario: str, app_base: str) -> list[
 
 # ── URL map builder ────────────────────────────────────────────────────────────
 
-def _build_url_map(app_base: str, store: str) -> dict[str, str]:
-    """Build MCSL page URL map from the app base URL and store slug."""
-    return {
-        "shipping":         f"{app_base}/shopify",
-        "appproducts":      f"{app_base}/products",
-        "settings":         f"{app_base}/settings/0",
-        "carriers":         f"{app_base}/settings/0",
-        "pickup":           f"{app_base}/pickup",
-        "faq":              f"{app_base}/faq",
-        "rates log":        f"{app_base}/rateslog",
-        "orders":           f"https://admin.shopify.com/store/{store}/orders",
-        "shopifyproducts":  f"https://admin.shopify.com/store/{store}/products",
-    }
+# MCSL navigation map — all in-app destinations use hamburger menu search.
+# "orders" and "shopifyproducts" are the only Shopify admin URLs (outside the app).
+_MCSL_NAV_MAP: dict[str, dict] = {
+    # key            : how to reach it
+    "orders":         {"type": "tab", "index": 1},          # ORDERS tab (responsiveNav nth-child 1)
+    "labels":         {"type": "tab", "index": 2},          # LABELS tab
+    "pickup":         {"type": "tab", "index": 3},          # PICKUP tab
+    "manifest":       {"type": "tab", "index": 4},          # MANIFEST tab
+    "tracking":       {"type": "tab", "index": 5},          # TRACKING tab
+    # hamburger → search → click
+    "views":          {"type": "hamburger", "search": "Views"},
+    "appproducts":    {"type": "hamburger", "search": "Products"},
+    "carriers":       {"type": "hamburger", "search": "Carriers"},
+    "address":        {"type": "hamburger", "search": "Address"},
+    "shipping":       {"type": "hamburger", "search": "Shipping"},
+    "automation":     {"type": "hamburger", "search": "Automation"},
+    "shippingrates":  {"type": "hamburger", "search": "Shipping Rates"},
+    "generalsettings":{"type": "hamburger", "search": "General Settings"},
+    "bulkimports":    {"type": "hamburger", "search": "Bulk Imports"},
+    "account":        {"type": "hamburger", "search": "Account"},
+    "stores":         {"type": "hamburger", "search": "Stores"},
+    # Shopify admin — full page navigation (outside app iframe)
+    "shopifyorders":  {"type": "shopify_url", "path": "orders"},
+    "shopifyproducts":{"type": "shopify_url", "path": "products"},
+}
+
+
+def _navigate_in_app(page: "Page", destination: str, store: str = "") -> bool:
+    """Click-based navigation for MCSL — no URL jumping inside the app.
+
+    MCSL has a single app endpoint. All sections are reached by:
+      - Clicking a top tab (responsiveNav) for ORDERS/LABELS/PICKUP/MANIFEST/TRACKING
+      - Clicking hamburger (Menu button) → searching → clicking result for settings sections
+      - For Shopify admin pages (shopifyorders, shopifyproducts): page.goto() is acceptable
+        because those are outside the app iframe entirely.
+    """
+    key = destination.lower().replace(" ", "").replace("-", "")
+    nav = _MCSL_NAV_MAP.get(key)
+    if nav is None:
+        logger.warning("navigate: unknown destination %r", destination)
+        return False
+
+    try:
+        app_frame = page.frame_locator('iframe[name="app-iframe"]')
+
+        if nav["type"] == "tab":
+            idx = nav["index"]
+            app_frame.locator(f'div[class="responsiveNav"]:nth-child({idx})').click()
+            page.wait_for_timeout(1000)
+            return True
+
+        if nav["type"] == "hamburger":
+            search_term = nav["search"]
+            # Click the Menu (hamburger) button inside the app iframe
+            page.locator('iframe[name="app-iframe"]').content_frame().get_by_role(
+                "button", name="Menu"
+            ).click()
+            page.wait_for_timeout(500)
+            # Fill the search box that appears in the drawer
+            app_frame.locator(
+                'div[role="presentation"]>div>div>div>input[placeholder="Search..."]'
+            ).fill(search_term)
+            page.wait_for_timeout(300)
+            # Click the matching button (last match to avoid stale duplicates)
+            app_frame.get_by_role("button", name=search_term).last().click()
+            page.wait_for_timeout(1000)
+            return True
+
+        if nav["type"] == "shopify_url":
+            store_slug = store or getattr(config, "STORE", "")
+            page.goto(
+                f"https://admin.shopify.com/store/{store_slug}/{nav['path']}",
+                wait_until="domcontentloaded",
+            )
+            page.wait_for_timeout(500)
+            return True
+
+    except Exception as e:
+        logger.warning("navigate(%s) failed: %s", destination, e)
+        return False
+
+    return False
 
 
 # ── MCSL workflow guide ────────────────────────────────────────────────────────
@@ -314,92 +383,104 @@ def _build_url_map(app_base: str, store: str) -> dict[str, str]:
 _MCSL_WORKFLOW_GUIDE = dedent("""\
 ## MCSL Multi-Carrier Shipping App — Key Workflows
 
-App slug: mcsl-qa  (URLs: admin.shopify.com/store/<store>/apps/mcsl-qa)
+App URL: admin.shopify.com/store/<store>/apps/mcsl-qa  (single endpoint)
 All app UI lives inside: iframe[name="app-iframe"]
 
-### TWO PRODUCT PAGES — DO NOT CONFUSE
+⚠️ MCSL HAS ONE ENDPOINT. All in-app navigation is CLICK-BASED ONLY.
+   Do NOT construct or jump to sub-URLs. Navigate by clicking tabs or the
+   hamburger (Menu) button — exactly as a user would.
 
-❶  nav_clicks: "AppProducts"  →  <app_base>/products
-   PURPOSE: Edit MCSL-specific settings on an EXISTING Shopify product.
-   Fields: Dimensions (L/W/H, unit), Weight, special services per carrier.
-   Save → success toast.
-   ⚠️ Cannot create new products here.
+### How to Navigate
 
-❷  nav_clicks: "ShopifyProducts"  →  admin.shopify.com/store/<store>/products
-   PURPOSE: Shopify product management — ONLY place to ADD/CREATE products.
+TOP TABS (click the tab text inside the app iframe):
+  ORDERS | LABELS | PICKUP | MANIFEST | TRACKING | HELP
 
-### All App Page URLs
-- nav_clicks: "Shipping"      → <app_base>/shopify         — App's own order grid
-- nav_clicks: "AppProducts"   → <app_base>/products        — Product settings
-- nav_clicks: "Settings"      → <app_base>/settings/0      — Carrier & global settings
-- nav_clicks: "Carriers"      → <app_base>/settings/0      — Same as Settings
-- nav_clicks: "PickUp"        → <app_base>/pickup          — Pickup scheduling
-- nav_clicks: "FAQ"           → <app_base>/faq
-- nav_clicks: "Rates Log"     → <app_base>/rateslog        — Storefront checkout rate log
-- nav_clicks: "Orders"        → admin.shopify.com/store/<store>/orders
-- nav_clicks: "ShopifyProducts" → admin.shopify.com/store/<store>/products
+HAMBURGER MENU (for settings sections):
+  1. Click the "Menu" button (role=button, name="Menu") inside app iframe
+  2. A search drawer opens — type the section name
+  3. Click the matching button in the results
+  Sections available: Views, Tracking, Products, Carriers, Address,
+                      Shipping, Automation, Shipping Rates,
+                      General Settings, Bulk Imports, Account, Stores
 
-### How to Generate a Label (MCSL-specific flow — NOT Shopify More Actions)
-MCSL label generation uses the app's own order grid:
-1. App sidebar → Shipping → "All Orders" grid (inside iframe)
-2. Add filter → Order Id → paste order ID → press Escape
-3. Click the order row (bold order number) → Order Summary page opens
-4. (Optional) Click "Prepare Shipment" button
-5. Click "Generate Label" button
-6. Wait for "LABEL CREATED" status → click "Mark As Fulfilled"
+### Getting the Latest Order (Order Import)
+Orders from Shopify import automatically when you navigate to the app.
+If the expected order is not visible:
+  → First: look for and click the "Refresh" button if it appears in the grid
+  → If no Refresh button: reload the page (up to 5 retries)
+  → Then filter by Order ID to find the specific order
 
-⚠️ DO NOT use Shopify admin "More Actions" for MCSL label generation.
-   The MCSL app has its own order grid — use App sidebar → Shipping.
+### Label Generation Flow (same for ALL carriers)
+1. Click "ORDERS" tab → All Orders grid loads inside iframe
+2. If order not visible → click Refresh button OR reload page
+3. Click "Add filter" → select "Order Id" → type order ID → press Escape
+4. Click the order link (bold order number) → Order Summary page opens
+5. If "Prepare Shipment" button is visible → click it (may reappear, click up to 3×)
+6. Click "Generate Label" button → wait for status button to show "LABEL CREATED"
+   (status locator: appFrame.getByRole('button').nth(2) — shows current status text)
+7. Click "Mark As Fulfilled" → wait for status to show "FULFILLED"
 
-### Label Status Values (App's Shipping page)
-- Pending           → no label yet
-- In Progress       → label being generated
-- Label Generated   → label created successfully
-- Failed            → label generation failed
+⚠️ Do NOT use Shopify admin "More Actions" for label generation.
+   MCSL has its own order grid — always use the ORDERS tab inside the app.
 
-Label status locator (inside iframe):
-  div[class="order-summary-greyBlock"] > div:nth-child(1) > div:nth-child(1) > div > span
-
-### Rate Log (App's Rates Log page)
-1. App sidebar → Rates Log (shows storefront checkout rate requests)
-2. Click a row → View all Rate Summary → 3-dots → View Log → .dialogHalfDivParent
-⚠️ Rates Log ONLY shows storefront checkout requests, NOT API-created orders.
+### After Label Generation — Shopify Order Verification
+To verify fulfillment status and tracking number in Shopify:
+  → navigate: "shopifyorders"  (this is the only case where we leave the app)
+  → Find the order row → check Fulfillment status = "Fulfilled"
+  → Open the order → verify tracking number is present
 
 ### Bulk Labels
-1. App sidebar → Shipping → All Orders grid
-2. Check header checkbox to select all orders
+1. Click "ORDERS" tab → All Orders grid
+2. Click the header checkbox to select all filtered orders
 3. Click "Generate labels" button → Label Batch page opens
+4. Wait for label batch status to change from "Processing" → "SUCCESS"
+5. Click "Mark as Fulfilled" in the batch grid
 
-## Carrier Account Configuration (CARRIER-02)
+### TWO DIFFERENT PRODUCT PAGES — DO NOT CONFUSE
 
-Navigation: App → Settings → Carriers tab
+❶  navigate: "appproducts"  →  hamburger → Products
+   PURPOSE: Edit MCSL-specific settings on an EXISTING Shopify product.
+   Fields: Dimensions (L/W/H/unit), Weight, Special Services per carrier
+           (Dry Ice, Alcohol, Battery, Signature, Insurance, etc.)
+   Save → success toast appears.
+   ⚠️ Cannot CREATE new products here.
 
-To add a new carrier account:
-  1. Navigate to settings: page.goto(f"{app_base}/settings/0", wait_until="domcontentloaded")
-  2. Click the "Carriers" tab (inside app iframe)
-  3. Click "Add Carrier" button
-  4. Select carrier type from dropdown (FedEx, UPS, DHL, USPS, etc.)
-  5. Fill in required credentials:
+❷  navigate: "shopifyproducts"  →  Shopify admin products page
+   PURPOSE: Create new products or edit Shopify-native fields (title, price, SKU).
+   ⚠️ No MCSL-specific fields here.
+
+### Carrier Account Configuration
+Navigation: hamburger → Carriers
+
+To ADD a carrier account:
+  1. navigate: "carriers" (hamburger → Carriers)
+  2. Click "Add Carrier" button
+  3. Select carrier type from dropdown
+  4. Fill credentials:
      - FedEx: Account Number, API Key, API Secret, Meter Number
      - UPS: Account Number, Client ID, Client Secret
      - DHL: Account Number, Site ID, Password
-     - USPS: Account Number (via EasyPost)
-  6. Click "Save" or "Add" button
-  7. Verify carrier appears in the carriers list
+     - USPS/EasyPost: Account Number
+     - Canada Post: Account Number
+  5. Click Save/Add → carrier appears in list
 
-To edit an existing carrier:
-  1. Navigate to Settings → Carriers tab
-  2. Find carrier row by carrier name
-  3. Click "Edit" button on that row
-  4. Update fields as needed
-  5. Click "Save"
+To EDIT a carrier:
+  1. navigate: "carriers"
+  2. Find carrier row → click Edit → update fields → Save
 
-Carrier codes for reference: FedEx=C2, UPS=C3, DHL=C1, USPS/EasyPost=C22, Canada Post=C4
+Carrier codes: FedEx=C2, UPS=C3, DHL=C1, USPS/EasyPost=C22, Canada Post=C4
 
-### Order Summary page (accessed from app's Shipping grid)
-1. App sidebar → Shipping → click order row
-2. Order Summary shows: label status, carrier badge, Generate Label button
-3. After generation: "Mark As Fulfilled" button appears
+### Order Summary page
+  - Reached by clicking an order row in the ORDERS grid
+  - Shows: label status badge, carrier badge, Generate Label / Mark As Fulfilled buttons
+  - Label status locator: appFrame.getByRole('button').nth(2)
+  - Status values: (empty) → "LABEL CREATED" → "FULFILLED"
+
+### Shopify Orders (admin.shopify.com/store/<store>/orders)
+  Use ONLY for post-fulfillment checks:
+  - Verify fulfillment status shows "Fulfilled"
+  - Verify tracking number has been added
+  ⚠️ Do NOT create orders here for automation — use the API (order_creator.py)
 """)
 
 
@@ -577,15 +658,21 @@ _PLAN_PROMPT = dedent("""\
 
     Plan how to verify this. The browser will ALWAYS start at the app home page.
 
-    Navigation rules:
-    - For label generation scenarios → nav_clicks: ["Shipping"]  (app order grid — MCSL-specific)
-    - For verifying an EXISTING label / downloading documents → nav_clicks: ["Shipping"]
-    - For app settings / carrier configuration → nav_clicks: ["Settings"]
-    - For rate log scenarios → nav_clicks: ["Rates Log"]
-    - For product-level settings → nav_clicks: ["AppProducts"]
-    - For creating/editing Shopify products → nav_clicks: ["ShopifyProducts"]
-    - ONLY use: "Shipping", "AppProducts", "Settings", "Carriers", "PickUp",
-      "ShopifyProducts", "FAQ", "Rates Log", "Orders"
+    Navigation rules (MCSL has ONE endpoint — all navigation is click-based):
+    - For label generation / order verification → nav_clicks: ["orders"]  (ORDERS tab)
+    - For verifying an EXISTING label / documents → nav_clicks: ["orders"]
+    - For carrier account configuration → nav_clicks: ["carriers"]  (hamburger → Carriers)
+    - For product-level settings (dry ice, dimensions, services) → nav_clicks: ["appproducts"]
+    - For creating/editing Shopify products → nav_clicks: ["shopifyproducts"]
+    - For post-fulfillment Shopify order checks → nav_clicks: ["shopifyorders"]
+    - For pickup scheduling → nav_clicks: ["pickup"]
+    - For tracking → nav_clicks: ["tracking"]
+    - For automation rules → nav_clicks: ["automation"]
+    - For settings (general, rates, address) → nav_clicks: ["generalsettings"]
+    - ONLY use destinations from _MCSL_NAV_MAP keys: "orders", "labels", "pickup",
+      "manifest", "tracking", "views", "appproducts", "carriers", "address",
+      "shipping", "automation", "shippingrates", "generalsettings", "bulkimports",
+      "account", "stores", "shopifyorders", "shopifyproducts"
 
     ORDER JUDGMENT — pick order_action by scenario type:
     | Scenario type                                                              | order_action           |
@@ -601,7 +688,7 @@ _PLAN_PROMPT = dedent("""\
       "app_path": "",
       "look_for": ["UI element or behaviour that proves this scenario is implemented"],
       "api_to_watch": ["API endpoint path fragment to watch in network calls"],
-      "nav_clicks": ["e.g. Shipping | Settings | AppProducts | ShopifyProducts | Rates Log"],
+      "nav_clicks": ["e.g. orders | carriers | appproducts | shopifyproducts | tracking"],
       "plan": "one sentence: how you will verify this scenario",
       "order_action": "none | existing_fulfilled | existing_unfulfilled | create_new | create_bulk",
       "carrier": "{carrier_name}"
@@ -1024,16 +1111,9 @@ def _do_action(page: Any, action: dict, app_base: str = "") -> bool:
         return True
 
     if atype == "navigate":
-        try:
-            url_key = action.get("url", "").lower()
-            url_map = _build_url_map(app_base, getattr(config, "STORE", ""))
-            target = url_map.get(url_key, action.get("url", ""))
-            page.goto(target, wait_until="domcontentloaded")
-            page.wait_for_timeout(500)
-            return True
-        except Exception as e:
-            logger.warning("navigate action failed: %s", e)
-            return False
+        destination = action.get("url", "")
+        store = getattr(config, "STORE", "")
+        return _navigate_in_app(page, destination, store)
 
     if atype == "switch_tab":
         try:
@@ -1157,38 +1237,53 @@ _DECISION_PROMPT = dedent("""\
     }}
 
     Available named navigate destinations (use in url field):
-    - "shipping"         → App's order grid (use for label generation flows)
-    - "settings"         → App settings (carrier accounts, global config)
-    - "carriers"         → Same as settings
-    - "appproducts"      → MCSL app products (dry ice, alcohol, battery, dimensions, signature)
-    - "shopifyproducts"  → Shopify product management (create new products)
-    - "orders"           → Shopify admin orders list
-    - "pickup"           → Pickup scheduling
-    - "rates log"        → Storefront checkout rate log
-    - "faq"              → App FAQ
+    ── In-app tabs (click the tab — no URL jump) ──
+    - "orders"           → ORDERS tab — app order grid (label generation, filtering)
+    - "labels"           → LABELS tab
+    - "pickup"           → PICKUP tab — pickup scheduling
+    - "manifest"         → MANIFEST tab
+    - "tracking"         → TRACKING tab — shipment tracking
+    ── In-app hamburger sections (Menu button → search → click) ──
+    - "carriers"         → Carriers — add/edit carrier accounts
+    - "appproducts"      → Products — MCSL product settings (dimensions, special services)
+    - "automation"       → Automation — automation rules
+    - "shippingrates"    → Shipping Rates
+    - "generalsettings"  → General Settings
+    - "address"          → Address settings
+    - "views"            → Views — custom order grid views
+    - "bulkimports"      → Bulk Imports
+    - "account"          → Account
+    - "stores"           → Stores
+    ── Shopify admin (leaves app, full page navigation) ──
+    - "shopifyorders"    → Shopify admin orders — use ONLY for post-fulfillment checks
+    - "shopifyproducts"  → Shopify admin products — create/edit Shopify products
 
     Rules:
     - action=verify      → you have clear evidence to give a verdict (pass/fail/partial)
     - action=qa_needed   → you genuinely cannot locate the feature after careful searching
     - ONLY reference targets that literally appear in the accessibility tree above
-    - Do NOT use Shopify "More Actions" for MCSL label generation — use App sidebar → Shipping
+    - MCSL has ONE endpoint — never construct sub-URLs; always navigate by clicking
     - App content is in iframe[name="app-iframe"] — click targets are INSIDE the app frame
     - action=observe on first step to capture visible elements before interacting
     - Do NOT explore unrelated sections of the app
+    - If expected order not visible: look for "Refresh" button and click it; else reload page
 
     TWO COMPLETELY DIFFERENT PRODUCT PAGES:
-    - navigate: "appproducts"  →  App Products (FedEx/MCSL settings on existing products)
+    - navigate: "appproducts"  →  MCSL Products (edit existing product special service settings)
       USE FOR: dry ice, alcohol, battery, dimensions, signature, declared value config
       ⚠️ NO "Add product" button — cannot CREATE products here
     - navigate: "shopifyproducts"  →  Shopify Products admin
       USE FOR: create/edit Shopify products (title, price, weight, SKU, variants)
       ⚠️ This is NOT the MCSL app — no MCSL-specific fields here
 
-    Label generation (MCSL-specific — NOT Shopify More Actions):
-    1. App sidebar → Shipping → All Orders grid (inside iframe)
-    2. Filter by Order Id → click order row
-    3. Click "Generate Label" button
-    4. Wait for "LABEL CREATED" status → click "Mark As Fulfilled"
+    Label generation (same flow for ALL carriers — NOT Shopify More Actions):
+    1. navigate: "orders" → ORDERS tab loads in app iframe
+    2. If order not visible → click Refresh button OR reload
+    3. Click "Add filter" → "Order Id" → type order ID → press Escape
+    4. Click the order link (bold order number) → Order Summary opens
+    5. If "Prepare Shipment" visible → click it (up to 3 times if it reappears)
+    6. Click "Generate Label" → wait for status button (nth(2)) = "LABEL CREATED"
+    7. Click "Mark As Fulfilled" → wait for status = "FULFILLED"
 """)
 
 
