@@ -410,15 +410,15 @@ If the expected order is not visible:
   → If no Refresh button: reload the page (up to 5 retries)
   → Then filter by Order ID to find the specific order
 
-### Label Generation Flow (same for ALL carriers)
+### Label Generation Flow (Manual — same for ALL carriers)
 1. Click "ORDERS" tab → All Orders grid loads inside iframe
-2. If order not visible → click Refresh button OR reload page
-3. Click "Add filter" → select "Order Id" → type order ID → press Escape
+2. If order not visible → click Refresh button OR reload page (up to 5 retries)
+3. Click "Add filter" → select menuitem "Order Id" → type order ID into textbox → press Escape
 4. Click the order link (bold order number) → Order Summary page opens
-5. If "Prepare Shipment" button is visible → click it (may reappear, click up to 3×)
-6. Click "Generate Label" button → wait for status button to show "LABEL CREATED"
-   (status locator: appFrame.getByRole('button').nth(2) — shows current status text)
-7. Click "Mark As Fulfilled" → wait for status to show "FULFILLED"
+5. If "Prepare Shipment" button is visible → click it (may reappear, retry up to 3×)
+6. Click "Generate Label" button (exact match, inside app iframe)
+7. Wait for status button (appFrame.getByRole('button').nth(2)) to show "LABEL CREATED" (up to 800s)
+8. After LABEL CREATED: verify Label Summary table is visible and shows SUCCESS cell
 
 ⚠️ Do NOT use Shopify admin "More Actions" for label generation.
    MCSL has its own order grid — always use the ORDERS tab inside the app.
