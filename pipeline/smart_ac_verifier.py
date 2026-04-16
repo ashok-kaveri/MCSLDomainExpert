@@ -666,8 +666,131 @@ def _network(page: Any, patterns: list[str] | None = None) -> str:
     return "\n".join(hits)
 
 
+def _get_app_frame(page: Any) -> Any:
+    """Return the app iframe Frame object, falling back to page if not found."""
+    try:
+        for frame in page.frames:
+            if "app-iframe" in (frame.name or ""):
+                return frame
+            url = frame.url or ""
+            if "pluginhive" in url or ("apps" in url and "shopify" in url):
+                return frame
+    except Exception:
+        pass
+    return page  # fallback to main page
+
+
 def _do_action(page: Any, action: dict, app_base: str = "") -> bool:
-    """Stub: execute a single browser action. Implemented in plan 02-02."""
+    """Execute a Claude-decided browser action. Returns True on success, False on failure.
+
+    Handles all 11 action types:
+      observe, click, fill, scroll, navigate, switch_tab, close_tab,
+      verify, qa_needed, download_zip (stub), download_file (stub)
+    """
+    atype = action.get("action", "observe")
+
+    # No-op actions — agentic loop handles verdict/question extraction
+    if atype in ("observe", "verify", "qa_needed"):
+        return True
+
+    if atype == "scroll":
+        try:
+            page.mouse.wheel(0, action.get("delta_y", 300))
+        except Exception:
+            try:
+                page.evaluate("window.scrollBy(0, 400)")
+            except Exception:
+                pass
+        return True
+
+    if atype == "navigate":
+        try:
+            url_key = action.get("url", "").lower()
+            url_map = _build_url_map(app_base, getattr(config, "STORE", ""))
+            target = url_map.get(url_key, action.get("url", ""))
+            page.goto(target, wait_until="domcontentloaded")
+            page.wait_for_timeout(500)
+            return True
+        except Exception as e:
+            logger.warning("navigate action failed: %s", e)
+            return False
+
+    if atype == "switch_tab":
+        try:
+            pages = page.context.pages
+            if len(pages) > 1:
+                new_page = pages[-1]
+                new_page.wait_for_load_state("domcontentloaded")
+                action["_new_page"] = new_page
+                return True
+            return False
+        except Exception as e:
+            logger.debug("switch_tab failed: %s", e)
+            return False
+
+    if atype == "close_tab":
+        try:
+            page.close()
+            remaining = page.context.pages
+            if remaining:
+                action["_new_page"] = remaining[0]
+            return True
+        except Exception as e:
+            logger.debug("close_tab failed: %s", e)
+            return False
+
+    if atype == "download_zip":
+        logger.warning(
+            "download_zip action not yet implemented (Phase 3). "
+            "action=%s", action
+        )
+        return False
+
+    if atype == "download_file":
+        logger.warning(
+            "download_file action not yet implemented (Phase 3). "
+            "action=%s", action
+        )
+        return False
+
+    # click and fill require a frame-aware locator
+    frame = _get_app_frame(page)
+    sel = action.get("selector", action.get("target", "")).strip()
+
+    if atype == "click":
+        for fn in [
+            lambda: frame.get_by_role("button", name=sel, exact=True).first.click(),
+            lambda: frame.get_by_role("link", name=sel, exact=True).first.click(),
+            lambda: frame.get_by_label(sel, exact=True).first.click(),
+            lambda: frame.get_by_text(sel, exact=True).first.click(),
+            lambda: frame.get_by_text(sel).first.click(),
+            lambda: frame.locator(sel).first.click(),
+            lambda: frame.locator(sel).first.dispatch_event("click"),
+        ]:
+            try:
+                fn()
+                page.wait_for_timeout(400)
+                return True
+            except Exception:
+                continue
+        logger.debug("click failed all strategies for selector: %r", sel)
+        return False
+
+    if atype == "fill":
+        label = action.get("label", sel)
+        value = action.get("value", "")
+        for fn in [
+            lambda: frame.get_by_label(label).fill(value),
+            lambda: frame.get_by_placeholder(action.get("label", "")).fill(value),
+            lambda: frame.locator(action.get("selector", "input")).first.fill(value),
+        ]:
+            try:
+                fn()
+                return True
+            except Exception:
+                continue
+        return False
+
     return True
 
 
