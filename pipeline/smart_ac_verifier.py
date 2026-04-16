@@ -1168,6 +1168,40 @@ def _get_app_frame(page: Any) -> Any:
     return page  # fallback to main page
 
 
+def _format_zip_for_context(extracted: dict) -> str:
+    """Format extracted ZIP contents into a readable context string for Claude."""
+    lines = ["=== Downloaded ZIP contents ==="]
+    for fname, content in extracted.items():
+        if isinstance(content, dict):
+            lines.append(f"[{fname}] JSON object with keys: {list(content.keys())}")
+            snippet = json.dumps(content, indent=2)[:800]
+            lines.append(snippet)
+        elif isinstance(content, str):
+            lines.append(f"[{fname}]\n{content[:500]}")
+        else:
+            lines.append(f"[{fname}] {content}")
+    return "\n".join(lines)
+
+
+def _format_file_for_context(content: "dict | str") -> str:
+    """Format downloaded file content into a readable context string for Claude."""
+    if isinstance(content, dict):
+        headers = content.get("headers", [])
+        row_count = content.get("row_count", 0)
+        sample_rows = content.get("sample_rows", [])
+        raw_preview = content.get("raw_preview", "")
+        lines = [
+            "=== Downloaded file contents ===",
+            f"Headers: {headers}",
+            f"Row count: {row_count}",
+            f"Sample rows: {sample_rows[:5]}",
+        ]
+        if raw_preview:
+            lines.append(f"Preview:\n{raw_preview[:500]}")
+        return "\n".join(lines)
+    return f"=== Downloaded file ===\n{str(content)[:1000]}"
+
+
 def _do_action(page: Any, action: dict, app_base: str = "") -> bool:
     """Execute a Claude-decided browser action. Returns True on success, False on failure.
 
@@ -1221,11 +1255,65 @@ def _do_action(page: Any, action: dict, app_base: str = "") -> bool:
             return False
 
     if atype == "download_zip":
-        logger.warning(
-            "download_zip action not yet implemented (Phase 3). "
-            "action=%s", action
-        )
-        return False
+        try:
+            import shutil as _shutil
+            tmp_dir = tempfile.mkdtemp(prefix="sav_zip_")
+            zip_path = os.path.join(tmp_dir, "mcsl_download.zip")
+            frame = _get_app_frame(page)
+            target = action.get("target", action.get("selector", "")).strip()
+
+            el_to_click = None
+            for fn in [
+                lambda: frame.get_by_role("button", name=target, exact=False),
+                lambda: frame.get_by_role("link",   name=target, exact=False),
+                lambda: frame.get_by_text(target, exact=False),
+                lambda: page.get_by_role("button",  name=target, exact=False),
+                lambda: page.get_by_role("link",    name=target, exact=False),
+                lambda: page.get_by_text(target, exact=False),
+            ]:
+                try:
+                    el = fn()
+                    if el.count() > 0:
+                        el_to_click = el.first
+                        break
+                except Exception:
+                    continue
+
+            if el_to_click is None:
+                logger.debug("download_zip: target %r not found", target)
+                _shutil.rmtree(tmp_dir, ignore_errors=True)
+                return False
+
+            with page.expect_download(timeout=30_000) as dl_info:
+                el_to_click.click(timeout=5_000)
+
+            dl = dl_info.value
+            dl.save_as(zip_path)
+            page.wait_for_timeout(500)
+
+            extracted: dict = {}
+            with zipfile.ZipFile(zip_path, "r") as zf:
+                for name in zf.namelist():
+                    ext = name.rsplit(".", 1)[-1].lower()
+                    if ext == "json":
+                        raw = zf.read(name).decode("utf-8", errors="replace")
+                        try:
+                            extracted[name] = json.loads(raw)
+                        except Exception:
+                            extracted[name] = raw
+                    elif ext in ("csv", "txt", "xml", "log"):
+                        extracted[name] = zf.read(name).decode("utf-8", errors="replace")[:3000]
+                    else:
+                        info = zf.getinfo(name)
+                        extracted[name] = f"({ext.upper()} binary — {info.file_size:,} bytes)"
+
+            action["_zip_content"] = extracted
+            logger.info("download_zip: extracted %d files — %s", len(extracted), list(extracted.keys()))
+            _shutil.rmtree(tmp_dir, ignore_errors=True)
+            return True
+        except Exception as e:
+            logger.debug("download_zip failed: %s", e)
+            return False
 
     if atype == "download_file":
         logger.warning(
