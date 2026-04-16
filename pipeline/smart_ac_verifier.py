@@ -1428,11 +1428,12 @@ def _verify_scenario(
             )
             env_path = get_carrier_env_for_code(carrier_code)
 
+            use_dangerous = bool(plan_data.get("dangerous_products"))
             if order_action == "create_new":
-                order_id = create_order(env_path)
+                order_id = create_order(env_path, use_dangerous_products=use_dangerous)
                 logger.info(f"Created order for scenario: {order_id}")
             elif order_action == "create_bulk":
-                order_ids = create_bulk_orders(env_path, count=3)
+                order_ids = create_bulk_orders(env_path, count=3, use_dangerous_products=use_dangerous)
                 order_id = order_ids[0] if order_ids else None
                 logger.info(f"Created bulk orders: {order_ids}")
 
