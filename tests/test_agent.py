@@ -323,6 +323,64 @@ def test_order_creator(tmp_path):
         assert all(oid == "9999" for oid in order_ids)
 
 
+def test_verify_scenario_order_wiring():
+    """AGENT-04: _verify_scenario calls create_order when plan_data has order_action='create_new'."""
+    from pathlib import Path
+    from unittest.mock import MagicMock, patch
+
+    from pipeline.smart_ac_verifier import _verify_scenario, ScenarioResult
+
+    mock_page = MagicMock()
+    mock_page.url = "https://example.com"
+    mock_page.frames = []
+    mock_page.main_frame = MagicMock()
+    mock_page.accessibility.snapshot.return_value = None
+    mock_page.screenshot.return_value = b"fake_png"
+    mock_page.evaluate.return_value = []
+
+    verify_action = {"action": "verify", "verdict": "pass", "finding": "ok"}
+
+    # Patch order_creator imports inside the module
+    with patch("pipeline.smart_ac_verifier._decide_next", return_value=verify_action), \
+         patch("pipeline.order_creator.requests.post") as mock_post:
+
+        mock_response = MagicMock()
+        mock_response.json.return_value = {"order": {"id": "ORD-123"}}
+        mock_response.raise_for_status.return_value = None
+        mock_post.return_value = mock_response
+
+        # Patch get_carrier_env_for_code to avoid filesystem lookup
+        with patch("pipeline.order_creator._get_carrier_env_path") as mock_env_path, \
+             patch("pipeline.order_creator._read_carrier_env") as mock_read_env:
+
+            mock_env_path.return_value = Path("/fake/path/ups.env")
+            mock_read_env.return_value = {
+                "SHOPIFY_STORE_NAME": "mcsl-automation",
+                "SHOPIFY_ACCESS_TOKEN": "fake_token",
+                "SHOPIFY_API_VERSION": "2023-01",
+                "SIMPLE_PRODUCTS_JSON": '[{"product_id": 123, "variant_id": 456}]',
+            }
+
+            result = _verify_scenario(
+                page=mock_page,
+                scenario="FedEx label generation",
+                card_name="Label Generation",
+                app_base="https://example.com",
+                plan_data={
+                    "order_action": "create_new",
+                    "carrier": "FedEx",
+                    "carrier_code": "C2",
+                    "api_to_watch": [],
+                },
+                ctx="",
+                claude=MagicMock(),
+                stop_flag=None,
+            )
+
+    assert isinstance(result, ScenarioResult)
+    assert result.status == "pass"
+
+
 def test_verdict_reporting():
     """AGENT-06: VerificationReport.to_dict() returns correct summary counts and stop_flag halts verify_ac."""
     from pipeline.smart_ac_verifier import VerificationReport, ScenarioResult

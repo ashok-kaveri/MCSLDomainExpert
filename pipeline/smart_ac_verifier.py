@@ -26,6 +26,7 @@ import logging
 import os
 import re
 import tempfile
+import time
 import zipfile
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -439,10 +440,23 @@ class ScenarioResult:
 @dataclass
 class VerificationReport:
     """Aggregate report for all scenarios in a card's AC."""
-    card_name: str
-    app_url: str
+    card_name: str = ""
+    app_url: str = ""
     scenarios: list[ScenarioResult] = field(default_factory=list)
-    summary: str = ""
+    duration_seconds: float = 0.0
+
+    @property
+    def total(self) -> int:
+        return len(self.scenarios)
+
+    @property
+    def summary(self) -> dict[str, int]:
+        """Return per-status counts: pass/fail/partial/qa_needed."""
+        counts: dict[str, int] = {"pass": 0, "fail": 0, "partial": 0, "qa_needed": 0}
+        for s in self.scenarios:
+            if s.status in counts:
+                counts[s.status] += 1
+        return counts
 
     @property
     def passed(self) -> int:
@@ -453,8 +467,30 @@ class VerificationReport:
         return sum(1 for s in self.scenarios if s.status in ("fail", "partial"))
 
     @property
-    def qa_needed(self) -> list[ScenarioResult]:
+    def qa_needed_list(self) -> list[ScenarioResult]:
         return [s for s in self.scenarios if s.status == "qa_needed"]
+
+    def to_dict(self) -> dict:
+        """Serialise report to a dict consumable by the Phase 4 Streamlit dashboard."""
+        return {
+            "card_name": self.card_name,
+            "total": self.total,
+            "summary": self.summary,
+            "duration_seconds": self.duration_seconds,
+            "scenarios": [
+                {
+                    "scenario": s.scenario,
+                    "carrier": s.carrier,
+                    "status": s.status,
+                    "finding": s.finding if s.finding else (
+                        "Scenario passed" if s.status == "pass" else "No finding recorded"
+                    ),
+                    "evidence_screenshot": s.evidence_screenshot,
+                    "steps_taken": len(s.steps),
+                }
+                for s in self.scenarios
+            ],
+        }
 
     def to_automation_context(self) -> str:
         """Convert verified flows into context string for automation writer."""
@@ -1284,6 +1320,33 @@ def _verify_scenario(
     zip_ctx = ""
     net_seen: list[str] = []
     api_endpoints: list[str] = plan_data.get("api_to_watch", [])
+
+    # --- ORDER CREATION (if plan requires it) ---
+    order_id: str | None = None
+    order_action = plan_data.get("order_action", "")
+    carrier_code = plan_data.get("carrier_code", "")
+
+    if order_action in ("create_new", "create_bulk") and carrier_code:
+        try:
+            from pipeline.order_creator import (
+                create_order, create_bulk_orders, get_carrier_env_for_code
+            )
+            env_path = get_carrier_env_for_code(carrier_code)
+
+            if order_action == "create_new":
+                order_id = create_order(env_path)
+                logger.info(f"Created order for scenario: {order_id}")
+            elif order_action == "create_bulk":
+                order_ids = create_bulk_orders(env_path, count=3)
+                order_id = order_ids[0] if order_ids else None
+                logger.info(f"Created bulk orders: {order_ids}")
+
+            if order_id:
+                # Inject order ID into scenario context so Claude can use it
+                ctx = f"TEST ORDER ID: {order_id}\n\n{ctx}"
+        except Exception as e:
+            logger.warning(f"Order creation failed for {order_action}/{carrier_code}: {e}")
+            # Continue without order — agent will attempt to find existing orders
 
     for step_num in range(1, MAX_STEPS + 1):
         if stop_flag and stop_flag():
