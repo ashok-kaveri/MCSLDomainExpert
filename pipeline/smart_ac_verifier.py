@@ -429,12 +429,17 @@ To verify fulfillment status and tracking number in Shopify:
   → Find the order row → check Fulfillment status = "Fulfilled"
   → Open the order → verify tracking number is present
 
-### Bulk Labels
+### Bulk Label Flow (LABEL-03)
 1. Click "ORDERS" tab → All Orders grid
-2. Click the header checkbox to select all filtered orders
-3. Click "Generate labels" button → Label Batch page opens
-4. Wait for label batch status to change from "Processing" → "SUCCESS"
-5. Click "Mark as Fulfilled" in the batch grid
+2. Create multiple orders (order_action: create_bulk, default 3)
+3. Filter for unfulfilled orders (Add filter → Fulfillment Status → Unfulfilled)
+   so only the test orders are visible in the grid
+4. Click the header row checkbox to select ALL visible unfulfilled orders:
+   (getByRole "row" name="#" → locator "label" → first click)
+5. Click "Generate labels" button — NOTE: lowercase "l" is EXACT, not "Generate Labels"
+   (capital L fails all click attempts) → Label Batch page opens
+6. Wait for all rows to show SUCCESS status (poll up to 300s)
+7. Click "Mark as Fulfilled"
 
 ### Actions Menu Label Flow (single order via Actions menu — LABEL-02)
 1. Click "ORDERS" tab → All Orders grid
