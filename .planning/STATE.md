@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: planning
-stopped_at: Completed 05-01-PLAN.md — app shell with MCSL branding, 24-class CSS, 12-key session state; 10 tests pass
-last_updated: "2026-04-17T06:24:00.232Z"
+stopped_at: Completed 05-02-PLAN.md — full sidebar with status badges, KB expanders, release progress, dry run toggle; 14 tests pass
+last_updated: "2026-04-17T06:31:33.628Z"
 last_activity: 2026-04-17 — Phase 4 complete; Phase 5-10 roadmap and requirements added
 progress:
   total_phases: 10
   completed_phases: 3
   total_plans: 26
-  completed_plans: 22
+  completed_plans: 23
   percent: 50
 ---
 
@@ -71,6 +71,7 @@ Progress: [█████░░░░░] 50% (plans: 21/42)
 | Phase 04-pipeline-dashboard P04 | 5 | 2 tasks | 2 files |
 | Phase 04-pipeline-dashboard P05 | 7 | 2 tasks | 3 files |
 | Phase 05-full-dashboard-ui P01 | 3 | 2 tasks | 2 files |
+| Phase 05-full-dashboard-ui P02 | 1 | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -138,6 +139,9 @@ Recent decisions affecting current work:
 - [Phase 04-pipeline-dashboard]: fetched_ac truthiness (not card_name) decides whether to use Trello result
 - [Phase 05-full-dashboard-ui]: 05-01: _CSS expanded from 8 to 24 classes using MCSL teal-navy brand colours matching .streamlit/config.toml
 - [Phase 05-full-dashboard-ui]: 05-01: _init_state() extended to 12 keys (4 Phase-4 + 8 Phase-5); sidebar stripped to placeholder — implemented in 05-02/03
+- [Phase 05-full-dashboard-ui]: _status_badge() placed at module level so tests can import it without calling main()
+- [Phase 05-full-dashboard-ui]: Ollama status uses live urllib HTTP check with timeout=2 wrapped in try/except — not hardcoded True
+- [Phase 05-full-dashboard-ui]: code_paths_initialized guard uses dict-form st.session_state set before widget keys registered — prevents StreamlitAPIException
 
 ### Pending Todos
 
@@ -149,6 +153,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-17T06:24:00.229Z
-Stopped at: Completed 05-01-PLAN.md — app shell with MCSL branding, 24-class CSS, 12-key session state; 10 tests pass
+Last session: 2026-04-17T06:31:33.626Z
+Stopped at: Completed 05-02-PLAN.md — full sidebar with status badges, KB expanders, release progress, dry run toggle; 14 tests pass
 Resume file: None
