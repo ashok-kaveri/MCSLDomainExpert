@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 04-04-PLAN.md — render_report() with styled cards, summary metrics, screenshot decode, all 5 tests pass
-last_updated: "2026-04-17T02:29:18.297Z"
+stopped_at: Completed 04-05-PLAN.md — card_processor Trello fetch, Run button wiring, all 7 dashboard tests pass
+last_updated: "2026-04-17T02:42:33.185Z"
 last_activity: 2026-04-16 — 03-02 Actions Menu Label + Return Label flows in guide, tests activated
 progress:
   total_phases: 4
-  completed_phases: 2
+  completed_phases: 3
   total_plans: 23
-  completed_plans: 20
+  completed_plans: 21
   percent: 38
 ---
 
@@ -69,6 +69,7 @@ Progress: [████░░░░░░] 38%
 | Phase 04-pipeline-dashboard P02 | 8 | 2 tasks | 2 files |
 | Phase 04-pipeline-dashboard P03 | 8 | 2 tasks | 2 files |
 | Phase 04-pipeline-dashboard P04 | 5 | 2 tasks | 2 files |
+| Phase 04-pipeline-dashboard P05 | 7 | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -131,6 +132,9 @@ Recent decisions affecting current work:
 - [Phase 04-pipeline-dashboard]: 04-03: total = max(prog.get(total,1),1) ZeroDivisionError guard ensures progress fraction never raises when sav_prog not yet populated
 - [Phase 04-pipeline-dashboard]: 04-04: render_report uses 5 st.columns() — Total + Pass + Fail + Partial + QA Needed metrics; test mock updated to match
 - [Phase 04-pipeline-dashboard]: 04-04: Screenshot decode wrapped in try/except — prevents crash on corrupted base64, shows caption fallback
+- [Phase 04-pipeline-dashboard]: card_processor uses os.environ.get() so tests can mock via patch after importlib.reload()
+- [Phase 04-pipeline-dashboard]: Lazy import from pipeline.card_processor inside Run handler — avoids cold-import cost on every Streamlit reload
+- [Phase 04-pipeline-dashboard]: fetched_ac truthiness (not card_name) decides whether to use Trello result
 
 ### Pending Todos
 
@@ -142,6 +146,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-17T02:29:18.294Z
-Stopped at: Completed 04-04-PLAN.md — render_report() with styled cards, summary metrics, screenshot decode, all 5 tests pass
+Last session: 2026-04-17T02:42:33.182Z
+Stopped at: Completed 04-05-PLAN.md — card_processor Trello fetch, Run button wiring, all 7 dashboard tests pass
 Resume file: None
