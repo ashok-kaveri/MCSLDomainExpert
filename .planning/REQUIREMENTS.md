@@ -61,7 +61,7 @@
 
 ### Pipeline Dashboard
 
-- [ ] **DASH-01**: Streamlit dashboard orchestrates Trello card → AC writing → AI QA Agent → test generation → sign-off
+- [x] **DASH-01**: Streamlit dashboard orchestrates Trello card → AC writing → AI QA Agent → test generation → sign-off
 - [ ] **DASH-02**: AI QA Agent runs in background threading.Thread so UI stays responsive during verification
 - [ ] **DASH-03**: Progress bar and live status updates shown during AI QA Agent execution
 - [ ] **DASH-04**: Stop button functional during AI QA Agent run (stop flag checked per loop iteration)
@@ -145,7 +145,7 @@
 | PRE-04 | Phase 3 | Complete |
 | PRE-05 | Phase 3 | Complete |
 | PRE-06 | Phase 3 | Complete |
-| DASH-01 | Phase 4 | Pending |
+| DASH-01 | Phase 4 | Complete |
 | DASH-02 | Phase 4 | Pending |
 | DASH-03 | Phase 4 | Pending |
 | DASH-04 | Phase 4 | Pending |
