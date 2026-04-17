@@ -141,6 +141,7 @@ def create_bulk_orders(
     carrier_env_path: str | Path,
     count: int = 3,
     address_override: dict | None = None,
+    use_dangerous_products: bool = False,
 ) -> list[str]:
     """
     Create N test Shopify orders.
@@ -150,7 +151,11 @@ def create_bulk_orders(
     order_ids = []
     for i in range(count):
         try:
-            oid = create_order(carrier_env_path, address_override=address_override)
+            oid = create_order(
+                carrier_env_path,
+                address_override=address_override,
+                use_dangerous_products=use_dangerous_products,
+            )
             order_ids.append(oid)
             logger.info(f"Bulk order {i+1}/{count}: {oid}")
         except Exception as e:

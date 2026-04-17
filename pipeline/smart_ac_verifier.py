@@ -10,13 +10,12 @@ Five-stage pipeline per scenario:
   4. Agentic browser loop — up to MAX_STEPS=15 (stubs until plan 02-02)
   5. Pass / fail / partial / qa_needed verdict with screenshot evidence
 
-MCSL-specific adaptations vs FedEx version:
+MCSL AI QA Agent:
   - Multi-carrier support: carrier name detected from AC text, injected into plan
   - CARRIER_CODES map — FedEx C2, UPS C3, DHL C1, USPS C22, etc.
-  - _MCSL_WORKFLOW_GUIDE replaces _APP_WORKFLOW_GUIDE (MCSL order grid navigation)
-  - App slug: mcsl-qa (NOT testing-553)
+  - App slug: mcsl-qa
   - iframe selector: iframe[name="app-iframe"]
-  - MCSL label flow: App order grid → Account Card → Generate Label (NOT Shopify More Actions)
+  - Label flow: ORDERS tab → filter by Order Id → Order Summary → Generate Label → LABEL CREATED
 """
 from __future__ import annotations
 
@@ -124,120 +123,192 @@ def _get_carrier_config_steps(carrier_name: str, action: str = "add") -> list[st
     return base_steps
 
 
-def _get_preconditions(carrier_name: str, scenario: str, app_base: str) -> list[str]:
+def _get_preconditions(
+    scenario_text: str,
+    carrier: str,
+    app_base: str = "",
+) -> list[str]:
     """Returns precondition step descriptions for special service scenarios.
 
     Steps are injected into the plan prompt so Claude knows what to configure
     before generating the label.
 
     Each branch returns an ordered list of step strings that reference the MCSL
-    label flow (app order grid, Account Card, Generate Label) — NOT Shopify More
-    Actions or any FedEx-only flow.
+    label flow (ORDERS tab → Order Id filter → Order Summary → Generate Label).
+    CLEANUP steps are appended as explicit list items (not comment strings) so
+    the agent executes them after label generation.
 
     Args:
-        carrier_name: Display name of the carrier (e.g. 'FedEx', 'UPS', 'DHL').
-        scenario:     Scenario text (used for keyword matching).
-        app_base:     Base URL of the MCSL app (e.g. 'https://…/apps/mcsl-qa').
+        scenario_text: Scenario text (used for keyword matching).
+        carrier:       Carrier name (e.g. 'fedex', 'FedEx', 'ups').
+        app_base:      Base URL of the MCSL app (optional, e.g. 'https://…/apps/mcsl-qa').
 
     Returns:
         List of natural-language step descriptions for the agent to follow.
     """
-    lower = scenario.lower()
-    carrier_lower = carrier_name.lower()
+    lower = scenario_text.lower()
+    carrier_lower = carrier.lower()
     steps: list[str] = []
 
-    # --- SHARED PRODUCT CONFIG STEPS ---
-    # Used for dry ice, alcohol, battery, signature (product-level settings)
+    # --- SHARED PRODUCT CONFIG STEPS (MCSL hamburger nav) ---
+    # Used for dry ice, alcohol, battery, signature (product-level settings in AppProducts).
     product_nav = [
-        f"Navigate to App Products ({app_base}/products)",
-        "Find the test product in the products list",
-        "Click the product to open its carrier settings",
+        "Click the hamburger menu in the app iframe",
+        "Click 'Products' in the navigation menu",
+        "Wait for AppProducts page to load",
+        "Find the test product by name link and click it to open product settings",
     ]
 
+    # --- CORRECT MCSL LABEL FLOW ---
+    # index 0-3: navigate to Order Summary + Prepare Shipment
+    # index 4: Generate Label
+    # index 5: Wait for LABEL CREATED
     label_flow = [
-        "Navigate to the app order grid (shipping tab)",
-        "Click the Account Card to open the order grid",
+        "Click 'ORDERS' tab → All Orders grid loads inside iframe",
         "Add filter: Order Id → paste the test order ID → press Escape",
-        "Wait for the order row to appear, then click the Order ID link",
+        "Click the order link (bold order number) → Order Summary page opens",
         "On Order Summary: if 'Prepare Shipment' button is visible, click it (retry up to 3x)",
         "Click 'Generate Label' button (exact match, inside app iframe)",
         "Wait for order status to reach 'LABEL CREATED' (up to 800s)",
     ]
 
-    cleanup_note = "(CLEANUP: After test, revert the product settings to their original values)"
+    save_steps = [
+        "Click Save button",
+        "Verify success toast (.s-alert-box-inner) appears",
+    ]
 
     # --- FEDEX ---
     if carrier_lower == "fedex":
         if "dry ice" in lower:
-            steps = product_nav + [
-                "Enable 'Is Dry Ice Needed' toggle on the product",
-                "Set Dry Ice Weight to a valid value (e.g. 1.0 kg)",
-                "Click Save",
-            ] + label_flow + [cleanup_note]
+            toggle_steps = [
+                "Enable 'Is Dry Ice Needed' toggle",
+                "Fill Dry Ice Weight field with a valid value (e.g. 1.0 kg)",
+            ]
+            cleanup = [
+                "(CLEANUP — after LABEL CREATED) Navigate back to AppProducts",
+                "(CLEANUP) Open the test product settings",
+                "(CLEANUP) Uncheck/disable 'Is Dry Ice Needed' toggle",
+                "(CLEANUP) Click Save",
+                "(CLEANUP) Verify success toast",
+            ]
+            steps = product_nav + toggle_steps + save_steps + label_flow + cleanup
 
         elif "alcohol" in lower:
-            steps = product_nav + [
-                "Enable 'Is Alcohol' toggle on the product",
-                "Select alcohol type (e.g. Wine) from the dropdown",
-                "Click Save",
-            ] + label_flow + [cleanup_note]
+            toggle_steps = [
+                "Enable 'Is Alcohol' toggle",
+                "Select alcohol type from dropdown (e.g. Wine)",
+            ]
+            cleanup = [
+                "(CLEANUP — after LABEL CREATED) Navigate back to AppProducts",
+                "(CLEANUP) Open the test product settings",
+                "(CLEANUP) Uncheck/disable 'Is Alcohol' toggle",
+                "(CLEANUP) Click Save",
+                "(CLEANUP) Verify success toast",
+            ]
+            steps = product_nav + toggle_steps + save_steps + label_flow + cleanup
 
         elif "battery" in lower:
-            steps = product_nav + [
-                "Enable 'Is Battery' toggle on the product",
-                "Set Battery Material (e.g. Lithium Ion)",
-                "Set Battery Packing (e.g. Packed with equipment)",
-                "Click Save",
-            ] + label_flow + [cleanup_note]
+            toggle_steps = [
+                "Enable 'Is Battery' or 'Is it a Dangerous Good' toggle",
+                "Select battery material type (e.g. Lithium Ion)",
+                "Select battery packing type (e.g. Packed with equipment)",
+            ]
+            cleanup = [
+                "(CLEANUP — after LABEL CREATED) Navigate back to AppProducts",
+                "(CLEANUP) Open the test product settings",
+                "(CLEANUP) Uncheck/disable the battery/dangerous good toggle",
+                "(CLEANUP) Click Save",
+                "(CLEANUP) Verify success toast",
+            ]
+            steps = product_nav + toggle_steps + save_steps + label_flow + cleanup
 
         elif "signature" in lower:
-            steps = product_nav + [
-                "Set Signature field to 'DIRECT' or 'INDIRECT' on the product",
-                "Click Save",
-            ] + label_flow + [cleanup_note]
+            toggle_steps = [
+                "Set 'FedEx\u00ae Delivery Signature Options' (or carrier equivalent) to Adult Signature Required",
+            ]
+            cleanup = [
+                "(CLEANUP — after LABEL CREATED) Navigate back to AppProducts",
+                "(CLEANUP) Open the test product settings",
+                "(CLEANUP) Reset Signature field to its original/default state",
+                "(CLEANUP) Click Save",
+                "(CLEANUP) Verify success toast",
+            ]
+            steps = product_nav + toggle_steps + save_steps + label_flow + cleanup
 
         elif "hal" in lower or "hold at location" in lower:
-            steps = label_flow[:5] + [
-                "Before clicking Generate Label, open the SideDock",
-                "Click 'Hold at Location' option in SideDock",
-                "Fill in the HAL location modal — select a FedEx location",
-                "Click Yes/Confirm",
-            ] + label_flow[5:] + [cleanup_note]
+            hal_steps = [
+                "Find the Hold at Location (HAL) setting in the FedEx carrier section",
+                "Enable Hold at Location and enter a valid FedEx facility address or zip code",
+                "Select the hold location from the results",
+                "Click Save → verify success toast (.s-alert-box-inner)",
+            ]
+            cleanup = [
+                "(CLEANUP — after LABEL CREATED) Navigate back to AppProducts",
+                "(CLEANUP) Find the test product and open FedEx carrier settings",
+                "(CLEANUP) Disable Hold at Location",
+                "(CLEANUP) Click Save → verify success toast",
+            ]
+            steps = product_nav + hal_steps + label_flow + cleanup
 
         elif "insurance" in lower:
-            steps = label_flow[:5] + [
-                "Before clicking Generate Label, open the SideDock",
-                "Click the Insurance pencil icon in SideDock",
-                "Enter the declared insurance value in the modal",
-                "Click Confirm",
-            ] + label_flow[5:] + [cleanup_note]
+            insurance_steps = [
+                "Find the Insurance or Declared Value field in the carrier section",
+                "Set the declared value / insurance amount (e.g. $100)",
+                "Click Save → verify success toast (.s-alert-box-inner)",
+            ]
+            cleanup = [
+                "(CLEANUP — after LABEL CREATED) Navigate back to AppProducts",
+                "(CLEANUP) Find the test product and open carrier settings",
+                "(CLEANUP) Clear the Insurance / Declared Value field",
+                "(CLEANUP) Click Save → verify success toast",
+            ]
+            steps = product_nav + insurance_steps + label_flow + cleanup
 
         else:
-            steps = label_flow  # Default FedEx flow (no special service setup)
+            steps = label_flow  # Default: no special service setup needed
 
     # --- UPS ---
     elif carrier_lower == "ups":
         if "signature" in lower:
-            steps = product_nav + [
+            toggle_steps = [
                 "Set Signature field to 'DELIVERY_CONFIRMATION' or 'SIGNATURE_REQUIRED' on the product",
-                "Click Save",
-            ] + label_flow + [cleanup_note]
+            ]
+            cleanup = [
+                "(CLEANUP — after LABEL CREATED) Navigate back to AppProducts",
+                "(CLEANUP) Open the test product settings",
+                "(CLEANUP) Reset Signature field to its original/default state",
+                "(CLEANUP) Click Save",
+                "(CLEANUP) Verify success toast",
+            ]
+            steps = product_nav + toggle_steps + save_steps + label_flow + cleanup
 
         elif "insurance" in lower:
-            steps = label_flow[:5] + [
-                "Open the SideDock before generating label",
-                "Click the Insurance option in SideDock",
-                "Enter declared value in the insurance modal",
-                "Click Confirm",
-            ] + label_flow[5:] + [cleanup_note]
+            insurance_steps = [
+                "Find the Insurance or Declared Value field in the carrier section",
+                "Set the declared value / insurance amount (e.g. $100)",
+                "Click Save → verify success toast (.s-alert-box-inner)",
+            ]
+            cleanup = [
+                "(CLEANUP — after LABEL CREATED) Navigate back to AppProducts",
+                "(CLEANUP) Find the test product and open carrier settings",
+                "(CLEANUP) Clear the Insurance / Declared Value field",
+                "(CLEANUP) Click Save → verify success toast",
+            ]
+            steps = product_nav + insurance_steps + label_flow + cleanup
 
         elif "cod" in lower or "cash on delivery" in lower:
-            steps = label_flow[:5] + [
-                "Open the SideDock before generating label",
-                "Enable COD (Cash on Delivery) option",
-                "Enter COD amount and payment method",
-                "Click Confirm",
-            ] + label_flow[5:] + [cleanup_note]
+            cod_steps = [
+                "Find the COD (Cash on Delivery) setting in the UPS carrier section of AppProducts",
+                "Enable COD and enter the COD amount and payment method",
+                "Click Save → verify success toast (.s-alert-box-inner)",
+            ]
+            cleanup = [
+                "(CLEANUP — after LABEL CREATED) Navigate back to AppProducts",
+                "(CLEANUP) Find the test product and open UPS carrier settings",
+                "(CLEANUP) Disable COD (Cash on Delivery)",
+                "(CLEANUP) Click Save → verify success toast",
+            ]
+            steps = product_nav + cod_steps + label_flow + cleanup
 
         else:
             steps = label_flow
@@ -245,16 +316,24 @@ def _get_preconditions(carrier_name: str, scenario: str, app_base: str) -> list[
     # --- USPS ---
     elif carrier_lower in ("usps", "usps stamps"):
         if "signature" in lower:
-            steps = product_nav + [
+            toggle_steps = [
                 "Set Signature field on the product to the required USPS signature option",
-                "Click Save",
-            ] + label_flow + [cleanup_note]
+            ]
+            cleanup = [
+                "(CLEANUP — after LABEL CREATED) Navigate back to AppProducts",
+                "(CLEANUP) Open the test product settings",
+                "(CLEANUP) Reset Signature field to its original/default state",
+                "(CLEANUP) Click Save",
+                "(CLEANUP) Verify success toast",
+            ]
+            steps = product_nav + toggle_steps + save_steps + label_flow + cleanup
 
         elif "registered" in lower or "registered mail" in lower:
-            steps = label_flow[:5] + [
+            registered_steps = [
                 "Ensure the service selected is 'First Class' or 'Priority' with Registered Mail add-on",
                 "Confirm Registered Mail option is visible in the rate/service selection",
-            ] + label_flow[5:] + [cleanup_note]
+            ]
+            steps = label_flow[:4] + registered_steps + label_flow[4:]
 
         else:
             steps = label_flow
@@ -262,24 +341,36 @@ def _get_preconditions(carrier_name: str, scenario: str, app_base: str) -> list[
     # --- DHL ---
     elif carrier_lower == "dhl":
         if "insurance" in lower:
-            steps = label_flow[:5] + [
-                "Open the SideDock before generating label",
-                "Click the Insurance option in SideDock",
-                "Enter declared value for DHL insurance",
-                "Click Confirm",
-            ] + label_flow[5:] + [cleanup_note]
+            insurance_steps = [
+                "Find the Insurance or Declared Value field in the carrier section",
+                "Set the declared value / insurance amount (e.g. $100)",
+                "Click Save → verify success toast (.s-alert-box-inner)",
+            ]
+            cleanup = [
+                "(CLEANUP — after LABEL CREATED) Navigate back to AppProducts",
+                "(CLEANUP) Find the test product and open carrier settings",
+                "(CLEANUP) Clear the Insurance / Declared Value field",
+                "(CLEANUP) Click Save → verify success toast",
+            ]
+            steps = product_nav + insurance_steps + label_flow + cleanup
 
         elif "signature" in lower:
-            steps = product_nav + [
-                "Set Signature field on the product for DHL",
-                "Click Save",
-            ] + label_flow + [cleanup_note]
+            toggle_steps = [
+                "Set Signature field on the product for DHL carrier requirements",
+            ]
+            cleanup = [
+                "(CLEANUP — after LABEL CREATED) Navigate back to AppProducts",
+                "(CLEANUP) Open the test product settings",
+                "(CLEANUP) Reset Signature field to its original/default state",
+                "(CLEANUP) Click Save",
+                "(CLEANUP) Verify success toast",
+            ]
+            steps = product_nav + toggle_steps + save_steps + label_flow + cleanup
 
         elif "international" in lower:
             steps = label_flow + [
                 "Verify commercial invoice is generated after LABEL CREATED status",
                 "Check that customs information (HS code, declared value, description) is present",
-                cleanup_note,
             ]
 
         else:
@@ -295,7 +386,7 @@ def _get_preconditions(carrier_name: str, scenario: str, app_base: str) -> list[
 # ── URL map builder ────────────────────────────────────────────────────────────
 
 # MCSL navigation map — all in-app destinations use hamburger menu search.
-# "orders" and "shopifyproducts" are the only Shopify admin URLs (outside the app).
+# "shopifyorders" and "shopifyproducts" navigate outside the app to Shopify admin (post-fulfillment checks only).
 _MCSL_NAV_MAP: dict[str, dict] = {
     # key            : how to reach it
     "orders":         {"type": "tab", "index": 1},          # ORDERS tab (responsiveNav nth-child 1)
@@ -410,18 +501,17 @@ If the expected order is not visible:
   → If no Refresh button: reload the page (up to 5 retries)
   → Then filter by Order ID to find the specific order
 
-### Label Generation Flow (same for ALL carriers)
+### Label Generation Flow (Manual — same for ALL carriers)
 1. Click "ORDERS" tab → All Orders grid loads inside iframe
-2. If order not visible → click Refresh button OR reload page
-3. Click "Add filter" → select "Order Id" → type order ID → press Escape
+2. If order not visible → click Refresh button OR reload page (up to 5 retries)
+3. Click "Add filter" → select menuitem "Order Id" → type order ID into textbox → press Escape
 4. Click the order link (bold order number) → Order Summary page opens
-5. If "Prepare Shipment" button is visible → click it (may reappear, click up to 3×)
-6. Click "Generate Label" button → wait for status button to show "LABEL CREATED"
-   (status locator: appFrame.getByRole('button').nth(2) — shows current status text)
-7. Click "Mark As Fulfilled" → wait for status to show "FULFILLED"
+5. If "Prepare Shipment" button is visible → click it (may reappear, retry up to 3×)
+6. Click "Generate Label" button (exact match, inside app iframe)
+7. Wait for status button (appFrame.getByRole('button').nth(2)) to show "LABEL CREATED" (up to 800s)
+8. After LABEL CREATED: verify Label Summary table is visible and shows SUCCESS cell
 
-⚠️ Do NOT use Shopify admin "More Actions" for label generation.
-   MCSL has its own order grid — always use the ORDERS tab inside the app.
+Always use the ORDERS tab inside the app for label generation.
 
 ### After Label Generation — Shopify Order Verification
 To verify fulfillment status and tracking number in Shopify:
@@ -429,12 +519,39 @@ To verify fulfillment status and tracking number in Shopify:
   → Find the order row → check Fulfillment status = "Fulfilled"
   → Open the order → verify tracking number is present
 
-### Bulk Labels
+### Bulk Label Flow (LABEL-03)
 1. Click "ORDERS" tab → All Orders grid
-2. Click the header checkbox to select all filtered orders
-3. Click "Generate labels" button → Label Batch page opens
-4. Wait for label batch status to change from "Processing" → "SUCCESS"
-5. Click "Mark as Fulfilled" in the batch grid
+2. Create multiple orders (order_action: create_bulk, default 3)
+3. Filter for unfulfilled orders (Add filter → Fulfillment Status → Unfulfilled)
+   so only the test orders are visible in the grid
+4. Click the header row checkbox to select ALL visible unfulfilled orders:
+   (getByRole "row" name="#" → locator "label" → first click)
+5. Click "Generate labels" button — NOTE: lowercase "l" is EXACT, not "Generate Labels"
+   (capital L fails all click attempts) → Label Batch page opens
+6. Wait for all rows to show SUCCESS status (poll up to 300s)
+7. Click "Mark as Fulfilled"
+
+### Actions Menu Label Flow (single order via Actions menu — LABEL-02)
+1. Click "ORDERS" tab → All Orders grid
+2. Add filter: Order Id → type order ID → press Escape
+3. Click header checkbox (getByRole "row" name="#" → locator "label" → first)
+4. Click Actions button (div[class="buttons-row"] > button:nth-child(4))
+5. In the Actions search box, type "Generate Label" → click menuitem "Generate Label"
+   → Label Batch page opens (same as Bulk Labels)
+6. Wait for SUCCESS status in batch grid
+7. Click "Mark as Fulfilled"
+
+### Return Label Flow (LABEL-04)
+⚠️ REQUIRES an already-FULFILLED order. Use order_action: existing_fulfilled in plan.
+1. Click "ORDERS" tab → All Orders grid
+2. Add filter: Order Id → type order ID → press Escape
+3. Click header checkbox (same as Actions Menu Label flow)
+4. Click Actions button (div[class="buttons-row"] > button:nth-child(4))
+5. In Actions search → type "Create Return Label" → click menuitem "Create Return Label"
+   → Return Label modal opens (header text = "Return Label")
+6. Click Submit button
+7. Verify order row status column = "Return Created"
+   (locator: #all-order-table table tbody tr:first → td:nth-child(11))
 
 ### TWO DIFFERENT PRODUCT PAGES — DO NOT CONFUSE
 
@@ -481,6 +598,60 @@ Carrier codes: FedEx=C2, UPS=C3, DHL=C1, USPS/EasyPost=C22, Canada Post=C4
   - Verify fulfillment status shows "Fulfilled"
   - Verify tracking number has been added
   ⚠️ Do NOT create orders here for automation — use the API (order_creator.py)
+
+---
+
+## Document Verification Strategies
+
+After label generation, use one or more of the following strategies to gather evidence.
+
+### DOC-01: Label Existence Badge Check
+After "Generate Label" click, verify status reaches LABEL CREATED:
+- Status span: div[class="order-summary-greyBlock"] > div:nth-child(1) > div:nth-child(1) > div > span
+- Status button (for polling): getByRole('button').nth(2) shows "LABEL CREATED"
+- Label Summary table visible: getByText('Label Summary')
+- SUCCESS cell visible: getByRole('cell', name='SUCCESS').first()
+
+### DOC-02: Download Documents ZIP
+On Order Summary after LABEL CREATED:
+1. Find "Download Documents" button (text may vary — probe AX tree if not found)
+2. action: download_zip, target: "Download Documents"
+3. Result: action["_zip_content"] populated with file names and content snippets
+4. Claude verifies expected document files are present (PDF size notes, CSV content, etc.)
+
+### DOC-03: Label Request XML/JSON (3-dots on Label Summary row)
+After LABEL CREATED, in the Label Summary table:
+1. Click 3-dots (⋯) on the label row:
+   appFrame TD selector: div[class="order-summary-root"]>...>tbody>tr>td:nth-child(8)
+   Use .nth(rowIndex) for a specific row
+2. Click "View Log" menuitem:
+   appFrame.locator('div[role="presentation"]>div:nth-child(2)>ul>li:nth-child(1)').first()
+3. Wait for .dialogHalfDivParent to be visible
+4. Read textContent() → strip whitespace → verify expected XML/JSON field names are present
+5. Close dialog via closeLabelRequestSummary button
+NOTE: This is a dialog — read text content directly from .dialogHalfDivParent. Do NOT use download_zip here.
+
+### DOC-04: Print Documents (New Tab Screenshot)
+⚠️ IMPORTANT: Print Documents opens a NEW TAB — do NOT use download_zip here.
+Steps:
+1. Click "Print Documents" button on Order Summary (standalone button)
+2. New tab opens at *.pluginhive.io domain
+3. action: switch_tab → active_page = new tab
+4. Take screenshot → Claude reads label service codes visible on label (ICE, ALCOHOL, ELB, ASR, DSR)
+5. action: close_tab → returns to Order Summary
+
+### DOC-05: Rate Log Screenshot (BEFORE label generation)
+On Order Summary, after rates load, BEFORE clicking Generate Label:
+1. FIRST: Click ViewallRateSummary (getByTitle 'View all Rate Summary') — table is COLLAPSED by default
+2. Wait for .rate-summary-table-container to be visible
+3. Click 3-dots button on rate summary row:
+   .rate-summary-table tbody tr td:last-child button[aria-haspopup="true"]
+4. Click View Log menuitem:
+   div[role="presentation"]>div:nth-child(2)>ul>li:nth-child(1) (first)
+5. Log dialog: .dialogHalfDivParent — contains JSON/XML request text
+6. Screenshot dialog → Claude verifies required fields
+7. Close: getByRole('button', name='Close')
+WARNING: Must expand ViewallRateSummary FIRST — 3-dots button is not visible on collapsed table.
 """)
 
 
@@ -901,7 +1072,7 @@ def _plan_scenario(
     is_special_service = any(kw in scenario_lower for kw in _SPECIAL_SERVICE_KEYWORDS)
     preconditions_block = ""
     if is_special_service and carrier_name:
-        precondition_steps = _get_preconditions(carrier_name, scenario, app_base)
+        precondition_steps = _get_preconditions(scenario_text=scenario, carrier=carrier_name, app_base=app_base)
         if precondition_steps:
             formatted = "\n".join(
                 f"  {i + 1}. {step}" for i, step in enumerate(precondition_steps)
@@ -1087,6 +1258,40 @@ def _get_app_frame(page: Any) -> Any:
     return page  # fallback to main page
 
 
+def _format_zip_for_context(extracted: dict) -> str:
+    """Format extracted ZIP contents into a readable context string for Claude."""
+    lines = ["=== Downloaded ZIP contents ==="]
+    for fname, content in extracted.items():
+        if isinstance(content, dict):
+            lines.append(f"[{fname}] JSON object with keys: {list(content.keys())}")
+            snippet = json.dumps(content, indent=2)[:800]
+            lines.append(snippet)
+        elif isinstance(content, str):
+            lines.append(f"[{fname}]\n{content[:500]}")
+        else:
+            lines.append(f"[{fname}] {content}")
+    return "\n".join(lines)
+
+
+def _format_file_for_context(content: "dict | str") -> str:
+    """Format downloaded file content into a readable context string for Claude."""
+    if isinstance(content, dict):
+        headers = content.get("headers", [])
+        row_count = content.get("row_count", 0)
+        sample_rows = content.get("sample_rows", [])
+        raw_preview = content.get("raw_preview", "")
+        lines = [
+            "=== Downloaded file contents ===",
+            f"Headers: {headers}",
+            f"Row count: {row_count}",
+            f"Sample rows: {sample_rows[:5]}",
+        ]
+        if raw_preview:
+            lines.append(f"Preview:\n{raw_preview[:500]}")
+        return "\n".join(lines)
+    return f"=== Downloaded file ===\n{str(content)[:1000]}"
+
+
 def _do_action(page: Any, action: dict, app_base: str = "") -> bool:
     """Execute a Claude-decided browser action. Returns True on success, False on failure.
 
@@ -1140,18 +1345,155 @@ def _do_action(page: Any, action: dict, app_base: str = "") -> bool:
             return False
 
     if atype == "download_zip":
-        logger.warning(
-            "download_zip action not yet implemented (Phase 3). "
-            "action=%s", action
-        )
-        return False
+        try:
+            import shutil as _shutil
+            tmp_dir = tempfile.mkdtemp(prefix="sav_zip_")
+            zip_path = os.path.join(tmp_dir, "mcsl_download.zip")
+            frame = _get_app_frame(page)
+            target = action.get("target", action.get("selector", "")).strip()
+
+            el_to_click = None
+            for fn in [
+                lambda: frame.get_by_role("button", name=target, exact=False),
+                lambda: frame.get_by_role("link",   name=target, exact=False),
+                lambda: frame.get_by_text(target, exact=False),
+                lambda: page.get_by_role("button",  name=target, exact=False),
+                lambda: page.get_by_role("link",    name=target, exact=False),
+                lambda: page.get_by_text(target, exact=False),
+            ]:
+                try:
+                    el = fn()
+                    if el.count() > 0:
+                        el_to_click = el.first
+                        break
+                except Exception:
+                    continue
+
+            if el_to_click is None:
+                logger.debug("download_zip: target %r not found", target)
+                _shutil.rmtree(tmp_dir, ignore_errors=True)
+                return False
+
+            with page.expect_download(timeout=30_000) as dl_info:
+                el_to_click.click(timeout=5_000)
+
+            dl = dl_info.value
+            dl.save_as(zip_path)
+            page.wait_for_timeout(500)
+
+            extracted: dict = {}
+            with zipfile.ZipFile(zip_path, "r") as zf:
+                for name in zf.namelist():
+                    ext = name.rsplit(".", 1)[-1].lower()
+                    if ext == "json":
+                        raw = zf.read(name).decode("utf-8", errors="replace")
+                        try:
+                            extracted[name] = json.loads(raw)
+                        except Exception:
+                            extracted[name] = raw
+                    elif ext in ("csv", "txt", "xml", "log"):
+                        extracted[name] = zf.read(name).decode("utf-8", errors="replace")[:3000]
+                    else:
+                        info = zf.getinfo(name)
+                        extracted[name] = f"({ext.upper()} binary — {info.file_size:,} bytes)"
+
+            action["_zip_content"] = extracted
+            logger.info("download_zip: extracted %d files — %s", len(extracted), list(extracted.keys()))
+            _shutil.rmtree(tmp_dir, ignore_errors=True)
+            return True
+        except Exception as e:
+            logger.debug("download_zip failed: %s", e)
+            return False
 
     if atype == "download_file":
-        logger.warning(
-            "download_file action not yet implemented (Phase 3). "
-            "action=%s", action
-        )
-        return False
+        try:
+            import csv as _csv
+            import shutil as _shutil
+            tmp_dir = tempfile.mkdtemp(prefix="sav_file_")
+            frame = _get_app_frame(page)
+            target = action.get("target", action.get("selector", "")).strip()
+
+            el_to_click = None
+            for fn in [
+                lambda: frame.get_by_role("button", name=target, exact=False),
+                lambda: frame.get_by_role("link",   name=target, exact=False),
+                lambda: frame.get_by_text(target, exact=False),
+                lambda: page.get_by_role("button",  name=target, exact=False),
+                lambda: page.get_by_role("link",    name=target, exact=False),
+                lambda: page.get_by_text(target, exact=False),
+            ]:
+                try:
+                    el = fn()
+                    if el.count() > 0:
+                        el_to_click = el.first
+                        break
+                except Exception:
+                    continue
+
+            if el_to_click is None:
+                logger.debug("download_file: target %r not found", target)
+                _shutil.rmtree(tmp_dir, ignore_errors=True)
+                return False
+
+            with page.expect_download(timeout=30_000) as dl_info:
+                el_to_click.click(timeout=5_000)
+
+            dl = dl_info.value
+            suggested = getattr(dl, "suggested_filename", "") or "download"
+            ext = suggested.rsplit(".", 1)[-1].lower() if "." in suggested else ""
+            file_path = os.path.join(tmp_dir, suggested or "download")
+            dl.save_as(file_path)
+            page.wait_for_timeout(500)
+
+            file_size = os.path.getsize(file_path)
+            result_content: "dict | str"
+
+            if ext == "csv":
+                with open(file_path, "r", encoding="utf-8", errors="replace") as fh:
+                    raw = fh.read()
+                reader = _csv.reader(raw.splitlines())
+                rows = list(reader)
+                headers = rows[0] if rows else []
+                data_rows = rows[1:] if len(rows) > 1 else []
+                result_content = {
+                    "headers": headers,
+                    "row_count": len(data_rows),
+                    "sample_rows": data_rows[:5],
+                    "raw_preview": raw[:500],
+                }
+            elif ext in ("xlsx", "xls"):
+                try:
+                    import openpyxl as _openpyxl
+                    wb = _openpyxl.load_workbook(file_path, read_only=True, data_only=True)
+                    ws = wb.active
+                    all_rows = list(ws.iter_rows(values_only=True))
+                    headers = list(all_rows[0]) if all_rows else []
+                    data_rows = [list(r) for r in all_rows[1:]]
+                    result_content = {
+                        "headers": headers,
+                        "row_count": len(data_rows),
+                        "sample_rows": data_rows[:5],
+                        "raw_preview": "",
+                    }
+                    wb.close()
+                except Exception:
+                    result_content = f"(Excel — {file_size:,} bytes)"
+            elif ext == "pdf":
+                result_content = f"(PDF — {file_size:,} bytes)"
+            else:
+                try:
+                    with open(file_path, "r", encoding="utf-8", errors="replace") as fh:
+                        result_content = fh.read(2000)
+                except Exception:
+                    result_content = f"({ext.upper() or 'BINARY'} — {file_size:,} bytes)"
+
+            action["_file_content"] = result_content
+            logger.info("download_file: saved %r (%d bytes, ext=%s)", suggested, file_size, ext)
+            _shutil.rmtree(tmp_dir, ignore_errors=True)
+            return True
+        except Exception as e:
+            logger.debug("download_file failed: %s", e)
+            return False
 
     # click and fill require a frame-aware locator
     frame = _get_app_frame(page)
@@ -1276,7 +1618,7 @@ _DECISION_PROMPT = dedent("""\
       USE FOR: create/edit Shopify products (title, price, weight, SKU, variants)
       ⚠️ This is NOT the MCSL app — no MCSL-specific fields here
 
-    Label generation (same flow for ALL carriers — NOT Shopify More Actions):
+    Label generation (same flow for ALL carriers):
     1. navigate: "orders" → ORDERS tab loads in app iframe
     2. If order not visible → click Refresh button OR reload
     3. Click "Add filter" → "Order Id" → type order ID → press Escape
@@ -1428,11 +1770,12 @@ def _verify_scenario(
             )
             env_path = get_carrier_env_for_code(carrier_code)
 
+            use_dangerous = bool(plan_data.get("dangerous_products"))
             if order_action == "create_new":
-                order_id = create_order(env_path)
+                order_id = create_order(env_path, use_dangerous_products=use_dangerous)
                 logger.info(f"Created order for scenario: {order_id}")
             elif order_action == "create_bulk":
-                order_ids = create_bulk_orders(env_path, count=3)
+                order_ids = create_bulk_orders(env_path, count=3, use_dangerous_products=use_dangerous)
                 order_id = order_ids[0] if order_ids else None
                 logger.info(f"Created bulk orders: {order_ids}")
 
@@ -1489,7 +1832,9 @@ def _verify_scenario(
             active_page = action["_new_page"]
 
         if "_zip_content" in action:
-            zip_ctx = action.get("_zip_summary", "")
+            zip_ctx = _format_zip_for_context(action["_zip_content"])
+        if "_file_content" in action:
+            zip_ctx = _format_file_for_context(action["_file_content"])
 
     else:
         result.status = "partial"

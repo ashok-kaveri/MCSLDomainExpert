@@ -2,7 +2,7 @@
 
 ## Overview
 
-MCSLDomainExpert is built in four phases that mirror the FedexDomainExpert architecture while adding multi-carrier awareness. Phase 1 establishes the knowledge foundation — ChromaDB collections, RAG ingestion, and project infrastructure — so that every downstream component has domain knowledge to draw on. Phase 2 builds the AI QA Agent core: the agentic browser loop, multi-carrier planning, and carrier-specific special service flows. Phase 3 layers the full label generation, document verification, and pre-requirements scaffolding on top of the working agent. Phase 4 wires it all into the Streamlit Pipeline Dashboard with threading, stop button, and live progress reporting. By the end of Phase 4, the system can autonomously verify any MCSL AC scenario across all supported carriers with clear pass/fail evidence.
+MCSLDomainExpert is built in ten phases. Phases 1–4 mirror the FedexDomainExpert architecture while adding multi-carrier awareness: Phase 1 establishes the knowledge foundation, Phase 2 builds the AI QA Agent core, Phase 3 layers label generation and pre-requirements, and Phase 4 wires everything into a basic Streamlit dashboard. Phases 5–10 expand the dashboard into full feature parity with the FedEx QA Pipeline: a 7-tab Streamlit app with User Story writing, Move Cards, Release QA, History, Sign Off, Write Automation, and Run Automation — plus a standalone Domain Expert Chat. By the end of Phase 10, the MCSL QA Pipeline matches the FedEx dashboard end-to-end.
 
 ## Phases
 
@@ -15,7 +15,13 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [ ] **Phase 1: Foundation** - Config, ChromaDB setup, knowledge base ingestion, and Domain Expert Chat
 - [x] **Phase 2: AI QA Agent Core** - Agentic browser loop, multi-carrier planning, and carrier-specific flows (completed 2026-04-16)
 - [ ] **Phase 3: Label + Docs + Pre-Requirements** - Label generation flows, document verification strategies, and pre-requirement injection
-- [ ] **Phase 4: Pipeline Dashboard** - Streamlit UI, threading, stop button, and full pipeline orchestration
+- [x] **Phase 4: Pipeline Dashboard** - Streamlit UI, threading, stop button, and full pipeline orchestration (completed 2026-04-17)
+- [x] **Phase 5: Full Dashboard UI** - 7-tab Streamlit app, MCSL branding, sidebar status/progress/KB sections (completed 2026-04-17)
+- [ ] **Phase 6: User Story + Move Cards + History** - User Story generation, AC refinement, Move Cards, History persistence
+- [ ] **Phase 7: Release QA Pipeline Core** - Release QA tab, per-card AC/validation/AI QA Agent, test case approval
+- [ ] **Phase 8: Slack + Sign Off** - Slack DM/channel integration, bug notifications, Sign Off tab
+- [ ] **Phase 9: Automation Writing** - Write Automation tab, Playwright POM+spec generation, Chrome Agent, git push
+- [ ] **Phase 10: Run Automation + Domain Expert Chat** - Run Automation tab, test results, Domain Expert Chat app
 
 ## Phase Details
 
@@ -65,18 +71,18 @@ Plans:
 **Depends on**: Phase 2
 **Requirements**: LABEL-01, LABEL-02, LABEL-03, LABEL-04, LABEL-05, DOC-01, DOC-02, DOC-03, DOC-04, DOC-05, PRE-01, PRE-02, PRE-03, PRE-04, PRE-05, PRE-06
 **Success Criteria** (what must be TRUE):
-  1. The agent generates a label end-to-end via Manual flow (Shopify Orders → Generate Label → Get Rates → SideDock → Generate) and confirms the "label generated" badge appears on Order Summary
+  1. The agent generates a label end-to-end via Manual flow (ORDERS tab → filter by Order Id → order link → Order Summary → Generate Label → LABEL CREATED) and confirms the "label generated" badge appears on Order Summary
   2. The agent generates labels via Auto-Generate, Bulk (Orders list → select all → Actions → Generate Labels), and Return Label flows — each completes without requiring human intervention
-  3. All five document verification strategies produce readable output: badge check (DOC-01), ZIP download read (DOC-02), How To JSON extraction (DOC-03), Print Documents new-tab screenshot with visual label codes (DOC-04), and rate log screenshot (DOC-05)
+  3. All five document verification strategies produce readable output: badge check (DOC-01), ZIP download read (DOC-02), 3-dots → View Log → dialogHalfDivParent XML/JSON (DOC-03), Print Documents new-tab screenshot with visual label codes (DOC-04), and rate log screenshot (DOC-05)
   4. For a dry ice scenario, the agent automatically enables "Is Dry Ice Needed" on AppProducts before generating the label and unchecks it after — without human prompting
   5. Pre-requirements are injected and cleaned up correctly for all six scenario types: dry ice, alcohol, battery, signature, HAL, and insurance
 **Plans**: 6 plans
 
 Plans:
-- [ ] 03-01: Manual label flow — App order grid → Account Card → filter by Order ID → Order Summary → Generate Label → LABEL CREATED
+- [ ] 03-01: Manual label flow — App order grid → ORDERS tab → filter by Order ID → order link → Order Summary → Generate Label → LABEL CREATED
 - [ ] 03-02: Auto-generate and return label flows — LABEL-02, LABEL-04
 - [ ] 03-03: Bulk label generation — LABEL-03 (header checkbox → Generate labels button → Label Batch page)
-- [ ] 03-04: Document verification strategies — DOC-01 badge, DOC-02 Download Documents ZIP, DOC-03 How To JSON, DOC-04 Print Documents new tab, DOC-05 rate log
+- [ ] 03-04: Document verification strategies — DOC-01 badge, DOC-02 Download Documents ZIP, DOC-03 3-dots → View Log → dialogHalfDivParent, DOC-04 Print Documents new tab, DOC-05 rate log
 - [ ] 03-05: download_zip and download_file action handlers — ZIP intercept, unzip, read JSON/CSV/XML/TXT/log; direct file intercept
 - [ ] 03-06: Pre-requirements resolver — _get_preconditions() for dry ice, alcohol, battery, signature, HAL, insurance with cleanup steps
 
@@ -99,14 +105,120 @@ Plans:
 - [ ] 04-04: Report display — per-scenario verdict rendering with pass/fail badges, finding text, screenshot thumbnails
 - [ ] 04-05: Full pipeline wiring — Trello → card_processor → smart_ac_verifier → report → sign-off flow
 
+### Phase 5: Full Dashboard UI
+**Goal**: Rebuild pipeline_dashboard.py as a 7-tab Streamlit app matching the FedEx QA Pipeline dashboard structure, with MCSL branding and all tabs scaffolded
+**Depends on**: Phase 4
+**Requirements**: UI-01, UI-02, UI-03, UI-04, UI-05, UI-06, UI-07
+**Success Criteria**:
+  1. App launches with 7 tabs: User Story, Move Cards, Release QA, History, Sign Off, Write Automation, Run Automation
+  2. Sidebar shows System Status (Claude API, Trello, Slack, Google Sheets, Ollama) with live badge checks
+  3. Sidebar shows Release Progress section (cards/TCs/approved/automation counters + progress bar)
+  4. Sidebar shows Code Knowledge Base section (Automation/Backend/Frontend repo sync)
+  5. Dark theme, MCSL branding header ("🚚 MCSL QA Pipeline"), wide layout
+**Plans**: 3 plans
+
+Plans:
+- [ ] 05-01: App shell — 7-tab layout, MCSL branding, page config, global CSS
+- [ ] 05-02: Sidebar — System Status badges, Release Progress, Knowledge Base sections
+- [ ] 05-03: Tab scaffolds — placeholder content for all 7 tabs with correct session state keys
+
+### Phase 6: User Story + Move Cards + History
+**Goal**: User Story tab (generate AC from description, refine, push to Trello), Move Cards tab (move between lists), History tab (persisted pipeline runs)
+**Depends on**: Phase 5
+**Requirements**: US-01, US-02, US-03, MC-01, HIST-01
+**Success Criteria**:
+  1. User can type a feature description and get a User Story + AC generated by Claude
+  2. User can refine the generated AC with a change request
+  3. Generated AC can be pushed to a new or existing Trello card
+  4. Move Cards tab loads cards from source list and moves selected to target list
+  5. Every approved card is saved to data/pipeline_history.json and shown in History tab
+**Plans**: 3 plans
+
+Plans:
+- [ ] 06-01: pipeline/user_story_writer.py — generate_user_story(), refine_user_story()
+- [ ] 06-02: User Story tab UI — textarea, Generate, Refine loop, Push to Trello
+- [ ] 06-03: Move Cards tab + History tab
+
+### Phase 7: Release QA Pipeline Core
+**Goal**: Release QA tab — load Trello cards, per-card AC generation, Domain Expert validation, AI QA Agent verification (threaded), test case generation and approval
+**Depends on**: Phase 6
+**Requirements**: RQA-01, RQA-02, RQA-03, RQA-04, RQA-05
+**Success Criteria**:
+  1. User selects a Trello list → cards load with release health summary
+  2. Per-card: Generate AC → validate with domain expert → run AI QA Agent in background thread
+  3. AI QA Agent results show per-scenario verdict with bug report + re-verify capability
+  4. Generate Test Cases → review → Approve (saves to Trello + Google Sheets)
+  5. Release analysis (risk level, cross-card conflicts, coverage gaps) shown on card load
+**Plans**: 4 plans
+
+Plans:
+- [ ] 07-01: pipeline/domain_validator.py — validate_card() using RAG + Claude
+- [ ] 07-02: pipeline/release_analyser.py — analyse_release() cross-card analysis
+- [ ] 07-03: Release QA tab — card load, per-card AC + validation + AI QA Agent UI
+- [ ] 07-04: Test case generation + approval + Google Sheets write
+
+### Phase 8: Slack + Sign Off
+**Goal**: Slack integration (DM, channels, bug notifications, sign-off), Sign Off tab (compose message, mark Trello done, export to Sheets)
+**Depends on**: Phase 7
+**Requirements**: SLACK-01, SLACK-02, SIGNOFF-01, SIGNOFF-02
+**Success Criteria**:
+  1. AC and test cases can be sent via Slack DM or posted to a channel
+  2. Bug reports are DMed to developers automatically from AI QA Agent results
+  3. Sign Off tab composes a formatted Slack message with card checkboxes and bug list
+  4. "Send Sign-Off" posts to Slack and marks all approved cards as QA-done in Trello
+**Plans**: 3 plans
+
+Plans:
+- [ ] 08-01: pipeline/slack_client.py — send_dm(), post_to_channel(), post_signoff(), list_slack_channels()
+- [ ] 08-02: pipeline/bug_reporter.py — notify_devs_of_bug(), ask_domain_expert()
+- [ ] 08-03: Sign Off tab UI
+
+### Phase 9: Automation Writing
+**Goal**: Write Automation tab (write Playwright POM + spec from TCs + optional Chrome agent exploration), integrated into Release QA Step 5
+**Depends on**: Phase 8
+**Requirements**: AUTO-01, AUTO-02, AUTO-03
+**Success Criteria**:
+  1. User can enter feature name + test cases and generate Playwright automation code
+  2. Chrome Agent can explore the live MCSL app and return element/nav data to inform code generation
+  3. Generated code can be pushed to a git branch automatically
+  4. Write Automation tab works standalone (no Trello card required)
+**Plans**: 3 plans
+
+Plans:
+- [ ] 09-01: pipeline/automation_writer.py — write_automation() generates POM + spec
+- [ ] 09-02: pipeline/feature_detector.py + pipeline/chrome_agent.py (MCSL-specific exploration)
+- [ ] 09-03: Write Automation tab UI + Release QA Step 5 integration
+
+### Phase 10: Run Automation + Domain Expert Chat
+**Goal**: Run Automation tab (run Playwright specs from UI), domain expert chat app for MCSL knowledge queries
+**Depends on**: Phase 9
+**Requirements**: RUN-01, CHAT-01, CHAT-02
+**Success Criteria**:
+  1. Run Automation tab shows spec files grouped by folder with checkboxes, runs selected specs
+  2. Test results (pass/fail/duration) shown in UI with "Post to Slack" button
+  3. Domain Expert Chat answers questions about the MCSL app using RAG over docs + codebase
+  4. Quick Questions sidebar buttons cover common MCSL queries (label generation, carrier config, etc.)
+**Plans**: 3 plans
+
+Plans:
+- [ ] 10-01: pipeline/test_runner.py — run_release_tests() + Run Automation tab
+- [ ] 10-02: ui/chat_app.py — MCSL Domain Expert Chat with RAG
+- [ ] 10-03: Quick Questions, Knowledge Base refresh, final integration
+
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 1 → 2 → 3 → 4
+Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 → 9 → 10
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Foundation | 4/5 | In Progress|  |
 | 2. AI QA Agent Core | 7/7 | Complete   | 2026-04-16 |
-| 3. Label + Docs + Pre-Requirements | 0/6 | Not started | - |
-| 4. Pipeline Dashboard | 0/5 | Not started | - |
+| 3. Label + Docs + Pre-Requirements | 5/6 | In Progress|  |
+| 4. Pipeline Dashboard | 5/5 | Complete   | 2026-04-17 |
+| 5. Full Dashboard UI | 3/3 | Complete   | 2026-04-17 |
+| 6. User Story + Move Cards + History | 2/3 | In Progress|  |
+| 7. Release QA Pipeline Core | 0/4 | Not started |  |
+| 8. Slack + Sign Off | 0/3 | Not started |  |
+| 9. Automation Writing | 0/3 | Not started |  |
+| 10. Run Automation + Domain Expert Chat | 0/3 | Not started |  |

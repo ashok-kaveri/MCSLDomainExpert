@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: executing
-stopped_at: Completed 02-07-PLAN.md — verify_ac() wired with stop_flag + VerificationReport.to_dict(); Phase 2 complete
-last_updated: "2026-04-16T05:59:18.345Z"
-last_activity: 2026-04-15 — 02-01 agent scaffold + Wave 0 stubs complete
+status: planning
+stopped_at: Completed 06-03-PLAN.md — tab_devdone and tab_history implemented; 24 dashboard tests pass; 96 total
+last_updated: "2026-04-17T11:36:00.968Z"
+last_activity: 2026-04-17 — Phase 4 complete; Phase 5-10 roadmap and requirements added
 progress:
-  total_phases: 4
-  completed_phases: 1
-  total_plans: 12
-  completed_plans: 10
-  percent: 33
+  total_phases: 10
+  completed_phases: 5
+  total_plans: 29
+  completed_plans: 27
+  percent: 50
 ---
 
 # Project State
@@ -21,16 +21,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-15)
 
 **Core value:** AI QA Agent autonomously verifies any MCSL app AC scenario across all supported carriers with clear pass/fail evidence
-**Current focus:** Phase 1 — Foundation
+**Current focus:** Phase 5 — Full Dashboard UI (about to plan)
 
 ## Current Position
 
-Phase: 2 of 4 (AI QA Agent Core)
-Plan: 1 of 7 in current phase (02-01 complete)
-Status: In progress
-Last activity: 2026-04-15 — 02-01 agent scaffold + Wave 0 stubs complete
+Phase: 5 of 10 (Full Dashboard UI — not yet started)
+Plan: 0 of 3 in current phase
+Status: Ready to plan
+Last activity: 2026-04-17 — Phase 4 complete; Phase 5-10 roadmap and requirements added
 
-Progress: [███░░░░░░░] 33%
+Progress: [█████░░░░░] 50% (plans: 21/42)
 
 ## Performance Metrics
 
@@ -60,6 +60,21 @@ Progress: [███░░░░░░░] 33%
 | Phase 02-ai-qa-agent-core P05 | 3 | 1 tasks | 1 files |
 | Phase 02-ai-qa-agent-core P06 | 25 | 2 tasks | 3 files |
 | Phase 02-ai-qa-agent-core P07 | 8 | 2 tasks | 2 files |
+| Phase 03-label-docs-pre-requirements P01 | 18 | 2 tasks | 3 files |
+| Phase 03-label-docs-pre-requirements P02 | 7 | 2 tasks | 2 files |
+| Phase 03-label-docs-pre-requirements P03 | 8 | 1 tasks | 2 files |
+| Phase 03-label-docs-pre-requirements P04 | 11 | 2 tasks | 2 files |
+| Phase 03-label-docs-pre-requirements P05 | 7 | 2 tasks | 2 files |
+| Phase 04-pipeline-dashboard P01 | 14 | 2 tasks | 3 files |
+| Phase 04-pipeline-dashboard P02 | 8 | 2 tasks | 2 files |
+| Phase 04-pipeline-dashboard P03 | 8 | 2 tasks | 2 files |
+| Phase 04-pipeline-dashboard P04 | 5 | 2 tasks | 2 files |
+| Phase 04-pipeline-dashboard P05 | 7 | 2 tasks | 3 files |
+| Phase 05-full-dashboard-ui P01 | 3 | 2 tasks | 2 files |
+| Phase 05-full-dashboard-ui P02 | 1 | 2 tasks | 2 files |
+| Phase 05-full-dashboard-ui P03 | 8 | 1 tasks | 2 files |
+| Phase 06-user-story-move-cards-history P02 | 2 | 2 tasks | 2 files |
+| Phase 06-user-story-move-cards-history P03 | 2 | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -82,7 +97,7 @@ Recent decisions affecting current work:
 - [Phase 01-foundation]: source_type='sheets' (not 'test_cases') matches --sources arg name
 - [Phase 01-foundation]: 6 sources: storepepsaas split into storepepsaas_server + storepepsaas_client for independent re-ingest
 - [Phase 01-foundation]: STOREPEPSAAS_SERVER_PATH + STOREPEPSAAS_CLIENT_PATH added to config.py as aliases for per-source ingest
-- [Phase 02-ai-qa-agent-core]: 02-01: MCSL label flow uses app order grid (Shipping → order row → Generate Label), NOT Shopify More Actions
+- [Phase 02-ai-qa-agent-core]: 02-01: MCSL label flow uses ORDERS tab (click 'ORDERS' tab → filter by Order Id → order link → Order Summary → Generate Label), NOT Shopify More Actions
 - [Phase 02-ai-qa-agent-core]: 02-01: App slug mcsl-qa confirmed in _build_url_map (not testing-553)
 - [Phase 02-ai-qa-agent-core]: 02-01: ScenarioResult.carrier field added for carrier-aware reporting downstream
 - [Phase 02-ai-qa-agent-core]: 02-01: venv at MCSLDomainExpert/.venv (parent repo), not worktree — absolute path required for pytest
@@ -95,13 +110,49 @@ Recent decisions affecting current work:
 - [Phase 02-ai-qa-agent-core]: 02-04: _get_carrier_config_steps returns a list for composability; _plan_scenario formats it inline when scenario matches CARRIER-02 keywords
 - [Phase 02-ai-qa-agent-core]: _SPECIAL_SERVICE_KEYWORDS frozenset added alongside _CARRIER_CONFIG_KEYWORDS for precondition detection
 - [Phase 02-ai-qa-agent-core]: preconditions_block appended to _PLAN_PROMPT string rather than adding a new format placeholder — avoids breaking existing prompt structure
-- [Phase 02-ai-qa-agent-core]: HAL and COD/insurance SideDock steps inserted at label_flow[5:] (before Generate Label click) to match live app flow
+- [Phase 02-ai-qa-agent-core]: HAL and insurance use AppProducts hamburger nav (not SideDock — corrected in Phase 03-06); COD uses AppProducts UPS carrier section
 - [Phase 02-ai-qa-agent-core]: DHL international commercial invoice verification appended after full label_flow (post-LABEL CREATED)
 - [Phase 02-ai-qa-agent-core]: MCSL order creator reads SIMPLE_PRODUCTS_JSON from per-carrier .env files, not productsconfig.json
 - [Phase 02-ai-qa-agent-core]: Order ID injected into ctx as 'TEST ORDER ID: {id}' prefix before the agentic step loop so Claude knows which order to navigate to
 - [Phase 02-ai-qa-agent-core]: VerificationReport gains to_dict(), duration_seconds, and summary property dict for Phase 4 Streamlit dashboard
 - [Phase 02-ai-qa-agent-core]: verify_ac() now calls _launch_browser() and closes browser in finally block — removes page=None stub from plans 02-01/02
 - [Phase 02-ai-qa-agent-core]: ANTHROPIC_API_KEY pre-check removed from verify_ac() — ChatAnthropic constructor validates at runtime, allows test patching
+- [Phase 03-label-docs-pre-requirements]: 03-01: test_manual_label_flow_plan verifies _MCSL_WORKFLOW_GUIDE string content directly — validates guide without network calls
+- [Phase 03-label-docs-pre-requirements]: 03-01: _MCSL_WORKFLOW_GUIDE Label Generation Flow expanded to 8 explicit steps — step 8 adds Label Summary SUCCESS cell verification
+- [Phase 03-label-docs-pre-requirements]: 03-01: create_bulk_orders gets use_dangerous_products param; _verify_scenario reads plan_data["dangerous_products"] to select product source
+- [Phase 03-label-docs-pre-requirements]: 03-02: test_auto_generate_flow (LABEL-02) is the actual stub — plan referenced test_actions_menu_label_flow but both are equivalent
+- [Phase 03-label-docs-pre-requirements]: 03-02: _PLAN_PROMPT order judgment table already had return label -> existing_fulfilled; guide section added warning to match
+- [Phase 03-label-docs-pre-requirements]: 03-03: test_bulk_label_flow asserts 'lowercase' keyword in guide — forces explicit casing warning not just correct button text
+- [Phase 03-label-docs-pre-requirements]: 03-03: _PLAN_PROMPT order judgment table already had 'bulk labels → create_bulk' mapping — no change required
+- [Phase 03-label-docs-pre-requirements]: 03-04: DOC-04 explicitly warns NOT to use download_zip — Print Documents is a new-tab flow using switch_tab
+- [Phase 03-label-docs-pre-requirements]: 03-04: DOC-05 requires ViewallRateSummary expand FIRST — rate table is COLLAPSED by default, 3-dots invisible without expand
+- [Phase 03-label-docs-pre-requirements]: 03-04: DOC-03 uses MCSL-specific td:nth-child(8) 3-dots locator — FedEx How-To ZIP flow does NOT exist in MCSL
+- [Phase 03-label-docs-pre-requirements]: 03-05: download_zip uses page.expect_download() — Frame objects lack this method; only Page exposes it
+- [Phase 03-label-docs-pre-requirements]: 03-05: _verify_scenario had broken _zip_summary reference — replaced with _format_zip_for_context(action['_zip_content'])
+- [Phase 04-pipeline-dashboard]: STATUS_BADGE dict maps 4 verdict types to CSS pill HTML; STATUS_BADGE_MD for plain-markdown contexts
+- [Phase 04-pipeline-dashboard]: start_run and render_report are stubs (pass) — implemented by 04-02 and 04-04 respectively
+- [Phase 04-pipeline-dashboard]: _run_pipeline() accesses st.session_state dict keys only — never calls any st.* render functions (threading contract)
+- [Phase 04-pipeline-dashboard]: sav_result assigned before sav_running=False in _run_pipeline() — result-before-flag ordering prevents polling race condition
+- [Phase 04-pipeline-dashboard]: 04-03: Stop button uses on_click= callback not conditional if st.button() — click captured before rerun fires
+- [Phase 04-pipeline-dashboard]: 04-03: total = max(prog.get(total,1),1) ZeroDivisionError guard ensures progress fraction never raises when sav_prog not yet populated
+- [Phase 04-pipeline-dashboard]: 04-04: render_report uses 5 st.columns() — Total + Pass + Fail + Partial + QA Needed metrics; test mock updated to match
+- [Phase 04-pipeline-dashboard]: 04-04: Screenshot decode wrapped in try/except — prevents crash on corrupted base64, shows caption fallback
+- [Phase 04-pipeline-dashboard]: card_processor uses os.environ.get() so tests can mock via patch after importlib.reload()
+- [Phase 04-pipeline-dashboard]: Lazy import from pipeline.card_processor inside Run handler — avoids cold-import cost on every Streamlit reload
+- [Phase 04-pipeline-dashboard]: fetched_ac truthiness (not card_name) decides whether to use Trello result
+- [Phase 05-full-dashboard-ui]: 05-01: _CSS expanded from 8 to 24 classes using MCSL teal-navy brand colours matching .streamlit/config.toml
+- [Phase 05-full-dashboard-ui]: 05-01: _init_state() extended to 12 keys (4 Phase-4 + 8 Phase-5); sidebar stripped to placeholder — implemented in 05-02/03
+- [Phase 05-full-dashboard-ui]: _status_badge() placed at module level so tests can import it without calling main()
+- [Phase 05-full-dashboard-ui]: Ollama status uses live urllib HTTP check with timeout=2 wrapped in try/except — not hardcoded True
+- [Phase 05-full-dashboard-ui]: code_paths_initialized guard uses dict-form st.session_state set before widget keys registered — prevents StreamlitAPIException
+- [Phase 05-full-dashboard-ui]: 7-tab layout uses exact variable names tab_us/tab_devdone/tab_release/tab_history/tab_signoff/tab_manual/tab_run required by test_ui01_tab_stubs
+- [Phase 05-full-dashboard-ui]: Pipeline header placed in main() body so it appears above tabs in main content area
+- [Phase 06-user-story-move-cards-history]: move_card_to_list_by_id calls PUT /1/cards/{card_id} directly with idList=list_id — no name lookup, prevents stale-list-name errors
+- [Phase 06-user-story-move-cards-history]: US_WRITER_PROMPT references MCSL multi-carrier (FedEx, UPS, DHL, USPS) — RAG context helpers catch all exceptions and return fallback strings
+- [Phase 06-user-story-move-cards-history]: _save_history() only called when dry_run is False — consistent with all other Trello/write operations
+- [Phase 06-user-story-move-cards-history]: History helpers added at module level so 06-03 History tab can import them directly
+- [Phase 06-user-story-move-cards-history]: move_card_to_list_by_id used exclusively in tab_devdone; name->ID map built from get_lists() prevents stale-name errors
+- [Phase 06-user-story-move-cards-history]: dd_chk_{card.id} per-card widget key prefix scoped to avoid future Phase 7 rqa_chk_ collision
 
 ### Pending Todos
 
@@ -113,6 +164,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-16T05:53:22.876Z
-Stopped at: Completed 02-07-PLAN.md — verify_ac() wired with stop_flag + VerificationReport.to_dict(); Phase 2 complete
+Last session: 2026-04-17T11:32:44.691Z
+Stopped at: Completed 06-03-PLAN.md — tab_devdone and tab_history implemented; 24 dashboard tests pass; 96 total
 Resume file: None
