@@ -51,7 +51,6 @@ def test_dash01_scaffold():
 # DASH-02: Threading
 # ---------------------------------------------------------------------------
 
-@pytest.mark.skip(reason="wave:04-02")
 def test_dash02_threading():
     from unittest.mock import patch, MagicMock
     import pipeline_dashboard as pd
