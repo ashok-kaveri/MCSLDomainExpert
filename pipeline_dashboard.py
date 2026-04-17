@@ -223,3 +223,22 @@ manual_ac = st.text_area(
     placeholder="Acceptance criteria text…",
     help="If Trello credentials are not configured, paste the AC text here.",
 )
+
+# ── Run button handler ─────────────────────────────────────────────────────────
+
+if run_clicked and not st.session_state.sav_running:
+    # Prefer manual paste if both are provided; Trello fetch implemented in 04-05
+    ac_input = manual_ac.strip() or trello_url.strip()
+    if not ac_input:
+        st.warning("Enter a Trello card URL or paste AC text to run.")
+    else:
+        # card_name will be enriched by card_processor in 04-05; use URL/text as placeholder
+        card_name = trello_url.strip() or "Manual AC"
+        start_run(
+            ac_text=ac_input,
+            card_name=card_name,
+            n_scenarios=int(max_scenarios),
+            headless=headless_mode,
+            max_scenarios=int(max_scenarios),
+        )
+        st.rerun()
