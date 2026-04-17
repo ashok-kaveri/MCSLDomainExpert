@@ -96,7 +96,42 @@ def _make_stop_callback(session_state: Any):
     return _stop
 
 
-# ── Thread launch stub (implemented in 04-02) ──────────────────────────────────
+# ── Thread worker (implemented in 04-02) ──────────────────────────────────────
+
+def _run_pipeline(
+    ac_text: str,
+    card_name: str,
+    headless: bool,
+    max_scenarios: int,
+) -> None:
+    """Worker function — runs in background thread. MUST NOT call any st.* functions."""
+    from pipeline.smart_ac_verifier import verify_ac  # lazy import keeps startup fast
+
+    try:
+        report = verify_ac(
+            ac_text=ac_text,
+            card_name=card_name,
+            stop_flag=lambda: st.session_state.sav_stop.is_set(),
+            progress_cb=_progress_cb,
+            headless=headless,
+            max_scenarios=max_scenarios,
+        )
+        # CRITICAL: set result FIRST, then clear running flag (avoid race condition)
+        st.session_state.sav_result = report.to_dict()
+    except Exception as exc:  # noqa: BLE001
+        st.session_state.sav_result = {
+            "error": str(exc),
+            "card_name": card_name,
+            "total": 0,
+            "summary": {"pass": 0, "fail": 0, "partial": 0, "qa_needed": 0},
+            "duration_seconds": 0.0,
+            "scenarios": [],
+        }
+    finally:
+        st.session_state.sav_running = False
+
+
+# ── Thread launch (implemented in 04-02) ──────────────────────────────────────
 
 def start_run(
     ac_text: str,
@@ -105,8 +140,21 @@ def start_run(
     headless: bool = True,
     max_scenarios: int = 10,
 ) -> None:
-    """Launch verify_ac() in a background thread. Implemented in plan 04-02."""
-    pass  # 04-02 replaces this body
+    """Launch verify_ac() in a background daemon thread."""
+    st.session_state.sav_running = True
+    st.session_state.sav_stop.clear()
+    st.session_state.sav_result = None
+    st.session_state.sav_prog = {
+        "current": 0,
+        "total":   n_scenarios,
+        "label":   "Starting\u2026",
+    }
+    t = threading.Thread(
+        target=_run_pipeline,
+        args=(ac_text, card_name, headless, max_scenarios),
+        daemon=True,
+    )
+    t.start()
 
 
 # ── Report render stub (implemented in 04-04) ─────────────────────────────────
