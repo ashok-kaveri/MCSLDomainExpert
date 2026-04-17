@@ -240,8 +240,10 @@ def test_rqa05_analyse_release_returns_report():
     fake_response = MagicMock()
     fake_response.content = fake_content
 
+    import config as _config
     with patch("pipeline.release_analyser.ChatAnthropic") as mock_claude, \
-         patch("rag.vectorstore.search", return_value=[]):
+         patch("rag.vectorstore.search", return_value=[]), \
+         patch.object(_config, "ANTHROPIC_API_KEY", "fake-key"):
         mock_llm = MagicMock()
         mock_llm.invoke.return_value = fake_response
         mock_claude.return_value = mock_llm
@@ -304,9 +306,17 @@ def test_rqa04_append_to_sheet_returns_meta():
     mock_gc = MagicMock()
     mock_gc.open_by_key.return_value = mock_sh
 
-    with patch("pipeline.sheets_writer.gspread") as mock_gspread, \
+    mock_gspread = MagicMock()
+    mock_gspread.authorize.return_value = mock_gc
+
+    mock_creds_cls = MagicMock()
+    mock_creds_cls.from_service_account_file.return_value = MagicMock()
+
+    import sys
+    with patch.dict(sys.modules, {"gspread": mock_gspread, "google.oauth2.service_account": MagicMock()}), \
          patch("pipeline.sheets_writer.check_duplicates", return_value=[]):
-        mock_gspread.authorize.return_value = mock_gc
+        # Ensure google.oauth2.service_account.Credentials is patchable
+        sys.modules["google.oauth2.service_account"].Credentials = mock_creds_cls
 
         from pipeline.sheets_writer import append_to_sheet
         result = append_to_sheet(
@@ -335,6 +345,7 @@ def test_rqa04_detect_tab_keyword_match():
 
 def test_rqa01_validate_card_returns_report():
     """validate_card() returns a ValidationReport with overall_status in {PASS, NEEDS_REVIEW, FAIL}."""
+    import config
     fake_json_str = (
         '{"overall_status":"PASS","summary":"OK","requirement_gaps":[],'
         '"ac_gaps":[],"accuracy_issues":[],"suggestions":[],'
@@ -343,8 +354,9 @@ def test_rqa01_validate_card_returns_report():
     fake_response = MagicMock()
     fake_response.content = fake_json_str
 
-    with patch("langchain_anthropic.ChatAnthropic") as mock_cls, \
-         patch("rag.vectorstore.search", return_value=[]):
+    with patch("pipeline.domain_validator.ChatAnthropic") as mock_cls, \
+         patch("rag.vectorstore.search", return_value=[]), \
+         patch.object(config, "ANTHROPIC_API_KEY", "test-key"):
         mock_llm = MagicMock()
         mock_llm.invoke.return_value = fake_response
         mock_cls.return_value = mock_llm
@@ -371,6 +383,7 @@ def test_rqa01_validate_card_no_api_key():
 
 def test_rqa01_validate_card_rag_failure():
     """validate_card() handles rag.vectorstore.search() exception gracefully — no crash."""
+    import config
     fake_json_str = (
         '{"overall_status":"PASS","summary":"OK","requirement_gaps":[],'
         '"ac_gaps":[],"accuracy_issues":[],"suggestions":[],'
@@ -379,8 +392,9 @@ def test_rqa01_validate_card_rag_failure():
     fake_response = MagicMock()
     fake_response.content = fake_json_str
 
-    with patch("langchain_anthropic.ChatAnthropic") as mock_cls, \
-         patch("rag.vectorstore.search", side_effect=Exception("Chroma not available")):
+    with patch("pipeline.domain_validator.ChatAnthropic") as mock_cls, \
+         patch("rag.vectorstore.search", side_effect=Exception("Chroma not available")), \
+         patch.object(config, "ANTHROPIC_API_KEY", "test-key"):
         mock_llm = MagicMock()
         mock_llm.invoke.return_value = fake_response
         mock_cls.return_value = mock_llm
