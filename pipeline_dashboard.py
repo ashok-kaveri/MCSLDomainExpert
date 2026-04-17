@@ -242,3 +242,34 @@ if run_clicked and not st.session_state.sav_running:
             max_scenarios=int(max_scenarios),
         )
         st.rerun()
+
+# ── Running state: progress bar + stop button ─────────────────────────────────
+
+if st.session_state.sav_running:
+    prog    = st.session_state.sav_prog
+    current = prog.get("current", 0)
+    total   = max(prog.get("total", 1), 1)   # guard: never divide by zero
+
+    st.progress(
+        current / total,
+        text=prog.get("label", "Running…"),
+    )
+
+    # on_click callback guarantees the event is set BEFORE the next rerun fires
+    st.button(
+        "Stop",
+        key="stop_btn",
+        on_click=lambda: st.session_state.sav_stop.set(),
+        type="secondary",
+    )
+
+    st.info(f"Verifying scenario {current} of {total}…")
+    time.sleep(0.5)
+    st.rerun()   # poll every 500 ms — triggers next script execution
+
+elif (
+    not st.session_state.sav_running
+    and st.session_state.sav_stop.is_set()
+    and st.session_state.sav_result is not None
+):
+    st.warning("Run stopped by user. Partial results shown below.")
