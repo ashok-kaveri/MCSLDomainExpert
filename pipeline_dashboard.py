@@ -326,3 +326,10 @@ elif (
     and st.session_state.sav_result is not None
 ):
     st.warning("Run stopped by user. Partial results shown below.")
+
+# ── Completed state: render report ────────────────────────────────────────────
+
+if not st.session_state.sav_running and st.session_state.sav_result is not None:
+    render_report(st.session_state.sav_result)
+elif not st.session_state.sav_running and st.session_state.sav_result is None:
+    st.info("Enter a Trello card URL or paste AC text above and click **Run** to start verification.")
