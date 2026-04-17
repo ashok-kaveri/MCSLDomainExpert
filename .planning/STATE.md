@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: planning
-stopped_at: Completed 07-03-PLAN.md — full tab_release UI Steps 1-2; 3 new RQA tests GREEN; 111 total
-last_updated: "2026-04-17T17:38:22.488Z"
+stopped_at: Completed 07-04-PLAN.md — Steps 3-4 TC generation + approval + Trello/Sheets write; 111 tests GREEN
+last_updated: "2026-04-17T17:42:06.058Z"
 last_activity: 2026-04-17 — Phase 4 complete; Phase 5-10 roadmap and requirements added
 progress:
   total_phases: 10
-  completed_phases: 5
+  completed_phases: 6
   total_plans: 33
-  completed_plans: 30
+  completed_plans: 31
   percent: 50
 ---
 
@@ -78,6 +78,7 @@ Progress: [█████░░░░░] 50% (plans: 21/42)
 | Phase 07-release-qa-pipeline-core P02 | 4 | 2 tasks | 3 files |
 | Phase 07-release-qa-pipeline-core P01 | 5 | 2 tasks | 4 files |
 | Phase 07-release-qa-pipeline-core P03 | 15 | 2 tasks | 2 files |
+| Phase 07-release-qa-pipeline-core P04 | 7 | 1 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -165,6 +166,8 @@ Recent decisions affecting current work:
 - [Phase 07-release-qa-pipeline-core]: validate_card() never raises — ValidationReport error field populated on all failure paths (no API key, RAG failure, Claude error)
 - [Phase 07-release-qa-pipeline-core]: Per-card sav_running_{card.id} key (not global sav_running) ensures concurrent AI QA Agent threads per card don't collide
 - [Phase 07-release-qa-pipeline-core]: Thread closure captures mutable loop variables as default args to avoid late-binding closure bugs inside for-loop over cards
+- [Phase 07-release-qa-pipeline-core]: write_test_cases_to_card and append_to_sheet imported at module top — called inside Streamlit button handler, no cold-start cost concern
+- [Phase 07-release-qa-pipeline-core]: Error isolation: Trello write and Sheets write each in separate try/except — partial failure shows warnings but still marks card approved and saves history
 
 ### Pending Todos
 
@@ -176,6 +179,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-17T17:38:22.486Z
-Stopped at: Completed 07-03-PLAN.md — full tab_release UI Steps 1-2; 3 new RQA tests GREEN; 111 total
+Last session: 2026-04-17T17:42:06.055Z
+Stopped at: Completed 07-04-PLAN.md — Steps 3-4 TC generation + approval + Trello/Sheets write; 111 tests GREEN
 Resume file: None
