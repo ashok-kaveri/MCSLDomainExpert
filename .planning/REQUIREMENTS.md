@@ -75,6 +75,75 @@
 - [x] **INFRA-04**: MCSL iframe structure handled: app content in `iframe[name="app-iframe"]`, Shopify admin content outside iframe
 - [x] **INFRA-05**: Partial re-ingest supported: `python ingest/run_ingest.py --sources wiki shopify_actions`
 
+## Phase 5-10: Full Dashboard
+
+### UI (Phase 5)
+| ID | Description |
+|----|-------------|
+| UI-01 | 7-tab Streamlit dashboard: User Story, Move Cards, Release QA, History, Sign Off, Write Automation, Run Automation |
+| UI-02 | Sidebar: System Status badges (Claude API, Trello, Slack, Google Sheets, Ollama) |
+| UI-03 | Sidebar: Release Progress section with counters and progress bar |
+| UI-04 | Sidebar: Code Knowledge Base (Automation/Backend/Frontend repo path + sync) |
+| UI-05 | MCSL branding: "🚚 MCSL QA Pipeline" header, dark theme, wide layout |
+| UI-06 | Global CSS: status badges, scenario cards, severity badges, pipeline flow bar |
+| UI-07 | Dry run toggle in sidebar |
+
+### User Story (Phase 6)
+| ID | Description |
+|----|-------------|
+| US-01 | Generate User Story + AC from plain English description using Claude + RAG |
+| US-02 | Refine generated AC with a change request (iterative loop) |
+| US-03 | Push generated AC to new or existing Trello card (list selector + member assign) |
+
+### Move Cards (Phase 6)
+| ID | Description |
+|----|-------------|
+| MC-01 | Move selected cards from source Trello list to target list with audit comment |
+
+### History (Phase 6)
+| ID | Description |
+|----|-------------|
+| HIST-01 | Persist all approved pipeline runs to data/pipeline_history.json, show in History tab |
+
+### Release QA (Phase 7)
+| ID | Description |
+|----|-------------|
+| RQA-01 | Load Trello cards from a selected list with release health summary (pass/fail/approved metrics) |
+| RQA-02 | Per-card: generate AC, validate with domain expert, show KB context + issues |
+| RQA-03 | Per-card: run AI QA Agent in background thread with live progress, stop button, results display |
+| RQA-04 | Per-card: generate test cases, review, approve → save to Trello + Google Sheets |
+| RQA-05 | Release intelligence: risk level, cross-card conflicts, coverage gaps, suggested test order |
+
+### Slack (Phase 8)
+| ID | Description |
+|----|-------------|
+| SLACK-01 | Send AC/TCs via Slack DM (user search) or post to channel |
+| SLACK-02 | Bug notifications: auto-DM developer when AI QA Agent finds a bug |
+
+### Sign Off (Phase 8)
+| ID | Description |
+|----|-------------|
+| SIGNOFF-01 | Compose Slack sign-off message with card checklist, bugs, QA lead mention |
+| SIGNOFF-02 | Mark all approved cards as QA-done in Trello after sign-off |
+
+### Automation Writing (Phase 9)
+| ID | Description |
+|----|-------------|
+| AUTO-01 | Generate Playwright POM + spec from feature name + test cases |
+| AUTO-02 | Chrome Agent explores live MCSL app to capture elements/nav for automation context |
+| AUTO-03 | Push generated code to git branch (optional auto-fix loop) |
+
+### Run Automation (Phase 10)
+| ID | Description |
+|----|-------------|
+| RUN-01 | Run selected Playwright spec files from UI, show pass/fail/duration results |
+
+### Domain Expert Chat (Phase 10)
+| ID | Description |
+|----|-------------|
+| CHAT-01 | RAG-backed chatbot for MCSL app knowledge (label gen, carrier config, special services, etc.) |
+| CHAT-02 | Quick Questions sidebar buttons, Knowledge Base refresh, source attribution |
+
 ## v2 Requirements
 
 ### Advanced Features
@@ -150,12 +219,40 @@
 | DASH-03 | Phase 4 | Complete |
 | DASH-04 | Phase 4 | Complete |
 | DASH-05 | Phase 4 | Complete |
+| UI-01 | Phase 5 | Pending |
+| UI-02 | Phase 5 | Pending |
+| UI-03 | Phase 5 | Pending |
+| UI-04 | Phase 5 | Pending |
+| UI-05 | Phase 5 | Pending |
+| UI-06 | Phase 5 | Pending |
+| UI-07 | Phase 5 | Pending |
+| US-01 | Phase 6 | Pending |
+| US-02 | Phase 6 | Pending |
+| US-03 | Phase 6 | Pending |
+| MC-01 | Phase 6 | Pending |
+| HIST-01 | Phase 6 | Pending |
+| RQA-01 | Phase 7 | Pending |
+| RQA-02 | Phase 7 | Pending |
+| RQA-03 | Phase 7 | Pending |
+| RQA-04 | Phase 7 | Pending |
+| RQA-05 | Phase 7 | Pending |
+| SLACK-01 | Phase 8 | Pending |
+| SLACK-02 | Phase 8 | Pending |
+| SIGNOFF-01 | Phase 8 | Pending |
+| SIGNOFF-02 | Phase 8 | Pending |
+| AUTO-01 | Phase 9 | Pending |
+| AUTO-02 | Phase 9 | Pending |
+| AUTO-03 | Phase 9 | Pending |
+| RUN-01 | Phase 10 | Pending |
+| CHAT-01 | Phase 10 | Pending |
+| CHAT-02 | Phase 10 | Pending |
 
 **Coverage:**
 - v1 requirements: 46 total (RAG×7, INFRA×5, AGENT×7, CARRIER×6, LABEL×5, DOC×5, PRE×6, DASH×5)
-- Mapped to phases: 44
+- Phase 5-10 requirements: 32 total (UI×7, US×3, MC×1, HIST×1, RQA×5, SLACK×2, SIGNOFF×2, AUTO×3, RUN×1, CHAT×2)
+- Grand total: 78 requirements mapped to phases
 - Unmapped: 0
 
 ---
 *Requirements defined: 2026-04-15*
-*Last updated: 2026-04-15 — traceability expanded to individual requirements, count corrected to 44*
+*Last updated: 2026-04-17 — Phase 5-10 requirements added (32 new); full dashboard feature parity with FedEx QA Pipeline*
