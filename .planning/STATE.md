@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: planning
-stopped_at: Completed 06-02-PLAN.md — tab_us fully implemented; 19 dashboard tests pass; 91 total
-last_updated: "2026-04-17T11:29:30.730Z"
+stopped_at: Completed 06-03-PLAN.md — tab_devdone and tab_history implemented; 24 dashboard tests pass; 96 total
+last_updated: "2026-04-17T11:32:44.694Z"
 last_activity: 2026-04-17 — Phase 4 complete; Phase 5-10 roadmap and requirements added
 progress:
   total_phases: 10
-  completed_phases: 4
+  completed_phases: 5
   total_plans: 29
-  completed_plans: 26
+  completed_plans: 27
   percent: 50
 ---
 
@@ -74,6 +74,7 @@ Progress: [█████░░░░░] 50% (plans: 21/42)
 | Phase 05-full-dashboard-ui P02 | 1 | 2 tasks | 2 files |
 | Phase 05-full-dashboard-ui P03 | 8 | 1 tasks | 2 files |
 | Phase 06-user-story-move-cards-history P02 | 2 | 2 tasks | 2 files |
+| Phase 06-user-story-move-cards-history P03 | 2 | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -150,6 +151,8 @@ Recent decisions affecting current work:
 - [Phase 06-user-story-move-cards-history]: US_WRITER_PROMPT references MCSL multi-carrier (FedEx, UPS, DHL, USPS) — RAG context helpers catch all exceptions and return fallback strings
 - [Phase 06-user-story-move-cards-history]: _save_history() only called when dry_run is False — consistent with all other Trello/write operations
 - [Phase 06-user-story-move-cards-history]: History helpers added at module level so 06-03 History tab can import them directly
+- [Phase 06-user-story-move-cards-history]: move_card_to_list_by_id used exclusively in tab_devdone; name->ID map built from get_lists() prevents stale-name errors
+- [Phase 06-user-story-move-cards-history]: dd_chk_{card.id} per-card widget key prefix scoped to avoid future Phase 7 rqa_chk_ collision
 
 ### Pending Todos
 
@@ -161,6 +164,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-17T11:29:30.728Z
-Stopped at: Completed 06-02-PLAN.md — tab_us fully implemented; 19 dashboard tests pass; 91 total
+Last session: 2026-04-17T11:32:44.691Z
+Stopped at: Completed 06-03-PLAN.md — tab_devdone and tab_history implemented; 24 dashboard tests pass; 96 total
 Resume file: None

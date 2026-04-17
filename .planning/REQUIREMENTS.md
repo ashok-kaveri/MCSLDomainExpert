@@ -226,11 +226,11 @@
 | UI-05 | Phase 5 | Complete |
 | UI-06 | Phase 5 | Complete |
 | UI-07 | Phase 5 | Complete |
-| US-01 | Phase 6 | Pending |
-| US-02 | Phase 6 | Pending |
-| US-03 | Phase 6 | Pending |
-| MC-01 | Phase 6 | Pending |
-| HIST-01 | Phase 6 | Pending |
+| US-01 | Phase 6 | Complete |
+| US-02 | Phase 6 | Complete |
+| US-03 | Phase 6 | Complete |
+| MC-01 | Phase 6 | Complete |
+| HIST-01 | Phase 6 | Complete |
 | RQA-01 | Phase 7 | Pending |
 | RQA-02 | Phase 7 | Pending |
 | RQA-03 | Phase 7 | Pending |
