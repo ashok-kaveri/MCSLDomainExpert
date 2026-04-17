@@ -10,13 +10,12 @@ Five-stage pipeline per scenario:
   4. Agentic browser loop — up to MAX_STEPS=15 (stubs until plan 02-02)
   5. Pass / fail / partial / qa_needed verdict with screenshot evidence
 
-MCSL-specific adaptations vs FedEx version:
+MCSL AI QA Agent:
   - Multi-carrier support: carrier name detected from AC text, injected into plan
   - CARRIER_CODES map — FedEx C2, UPS C3, DHL C1, USPS C22, etc.
-  - _MCSL_WORKFLOW_GUIDE replaces _APP_WORKFLOW_GUIDE (MCSL order grid navigation)
-  - App slug: mcsl-qa (NOT testing-553)
+  - App slug: mcsl-qa
   - iframe selector: iframe[name="app-iframe"]
-  - MCSL label flow: ORDERS tab → filter by Order Id → Order Summary → Generate Label → LABEL CREATED
+  - Label flow: ORDERS tab → filter by Order Id → Order Summary → Generate Label → LABEL CREATED
 """
 from __future__ import annotations
 
@@ -266,7 +265,7 @@ def _get_preconditions(
             steps = product_nav + insurance_steps + label_flow + cleanup
 
         else:
-            steps = label_flow  # Default FedEx flow (no special service setup)
+            steps = label_flow  # Default: no special service setup needed
 
     # --- UPS ---
     elif carrier_lower == "ups":
@@ -387,7 +386,7 @@ def _get_preconditions(
 # ── URL map builder ────────────────────────────────────────────────────────────
 
 # MCSL navigation map — all in-app destinations use hamburger menu search.
-# "orders" and "shopifyproducts" are the only Shopify admin URLs (outside the app).
+# "shopifyorders" and "shopifyproducts" navigate outside the app to Shopify admin (post-fulfillment checks only).
 _MCSL_NAV_MAP: dict[str, dict] = {
     # key            : how to reach it
     "orders":         {"type": "tab", "index": 1},          # ORDERS tab (responsiveNav nth-child 1)
@@ -512,8 +511,7 @@ If the expected order is not visible:
 7. Wait for status button (appFrame.getByRole('button').nth(2)) to show "LABEL CREATED" (up to 800s)
 8. After LABEL CREATED: verify Label Summary table is visible and shows SUCCESS cell
 
-⚠️ Do NOT use Shopify admin "More Actions" for label generation.
-   MCSL has its own order grid — always use the ORDERS tab inside the app.
+Always use the ORDERS tab inside the app for label generation.
 
 ### After Label Generation — Shopify Order Verification
 To verify fulfillment status and tracking number in Shopify:
@@ -631,7 +629,7 @@ After LABEL CREATED, in the Label Summary table:
 3. Wait for .dialogHalfDivParent to be visible
 4. Read textContent() → strip whitespace → verify expected XML/JSON field names are present
 5. Close dialog via closeLabelRequestSummary button
-NOTE: Do NOT use download_zip here — this is a dialog, not a file download. FedEx "How To" flow does NOT apply to MCSL.
+NOTE: This is a dialog — read text content directly from .dialogHalfDivParent. Do NOT use download_zip here.
 
 ### DOC-04: Print Documents (New Tab Screenshot)
 ⚠️ IMPORTANT: Print Documents opens a NEW TAB — do NOT use download_zip here.
@@ -1620,7 +1618,7 @@ _DECISION_PROMPT = dedent("""\
       USE FOR: create/edit Shopify products (title, price, weight, SKU, variants)
       ⚠️ This is NOT the MCSL app — no MCSL-specific fields here
 
-    Label generation (same flow for ALL carriers — NOT Shopify More Actions):
+    Label generation (same flow for ALL carriers):
     1. navigate: "orders" → ORDERS tab loads in app iframe
     2. If order not visible → click Refresh button OR reload
     3. Click "Add filter" → "Order Id" → type order ID → press Escape
