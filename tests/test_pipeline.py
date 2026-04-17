@@ -228,3 +228,102 @@ def test_hist01_entry_schema(tmp_path):
     assert "card_name" in loaded["card1"]
     assert "approved_at" in loaded["card1"]
     assert "card_url" in loaded["card1"]
+
+
+# ---------------------------------------------------------------------------
+# RQA-05: analyse_release — release intelligence + risk analysis
+# ---------------------------------------------------------------------------
+
+def test_rqa05_analyse_release_returns_report():
+    """analyse_release() returns ReleaseAnalysis with valid risk_level and empty error."""
+    fake_content = '{"risk_level":"LOW","risk_summary":"No conflicts","conflicts":[],"ordering":[],"coverage_gaps":[],"kb_context_summary":"","sources":[]}'
+    fake_response = MagicMock()
+    fake_response.content = fake_content
+
+    with patch("pipeline.release_analyser.ChatAnthropic") as mock_claude, \
+         patch("rag.vectorstore.search", return_value=[]):
+        mock_llm = MagicMock()
+        mock_llm.invoke.return_value = fake_response
+        mock_claude.return_value = mock_llm
+
+        from pipeline.release_analyser import analyse_release, CardSummary, ReleaseAnalysis
+        result = analyse_release(
+            "v1.2",
+            [CardSummary(card_id="c1", card_name="FedEx Label", card_desc="Add FedEx label")],
+        )
+
+    assert isinstance(result, ReleaseAnalysis)
+    assert result.risk_level in {"LOW", "MEDIUM", "HIGH"}
+    assert result.error == ""
+
+
+def test_rqa05_analyse_release_empty_cards():
+    """analyse_release() with empty cards list returns ReleaseAnalysis(risk_level='LOW') with non-empty error."""
+    from pipeline.release_analyser import analyse_release, ReleaseAnalysis
+
+    result = analyse_release("v1.2", [])
+
+    assert isinstance(result, ReleaseAnalysis)
+    assert result.risk_level == "LOW"
+    assert result.error != ""
+
+
+def test_rqa05_analyse_release_no_api_key():
+    """analyse_release() returns ReleaseAnalysis with non-empty error when ANTHROPIC_API_KEY is empty."""
+    import pipeline.release_analyser as ra_mod
+    import config
+
+    with patch.object(config, "ANTHROPIC_API_KEY", ""):
+        from pipeline.release_analyser import analyse_release, CardSummary, ReleaseAnalysis
+        result = analyse_release(
+            "v1.2",
+            [CardSummary(card_id="c1", card_name="X", card_desc="Y")],
+        )
+
+    assert isinstance(result, ReleaseAnalysis)
+    assert result.error != ""
+
+
+# ---------------------------------------------------------------------------
+# RQA-04: append_to_sheet + detect_tab — Google Sheets writer
+# ---------------------------------------------------------------------------
+
+def test_rqa04_append_to_sheet_returns_meta():
+    """append_to_sheet() returns dict with 'tab' (str) and 'rows_added' (int) keys."""
+    header_row = [["SI No", "Epic", "Scenarios", "Description", "Comments", "Priority", "Details", "Pass/Fail", "Release"]]
+
+    mock_ws = MagicMock()
+    mock_ws.get_all_values.return_value = header_row
+    mock_ws.append_row = MagicMock()
+    mock_ws.title = "Shipping Labels"
+
+    mock_sh = MagicMock()
+    mock_sh.worksheets.return_value = [mock_ws]
+    mock_sh.worksheet.return_value = mock_ws
+
+    mock_gc = MagicMock()
+    mock_gc.open_by_key.return_value = mock_sh
+
+    with patch("pipeline.sheets_writer.gspread") as mock_gspread, \
+         patch("pipeline.sheets_writer.check_duplicates", return_value=[]):
+        mock_gspread.authorize.return_value = mock_gc
+
+        from pipeline.sheets_writer import append_to_sheet
+        result = append_to_sheet(
+            "FedEx Signature Card",
+            "## TC-1: Signature Label\nGiven order placed\nWhen label generated\nThen signature required",
+            release="v1",
+        )
+
+    assert isinstance(result, dict)
+    assert "tab" in result and isinstance(result["tab"], str)
+    assert "rows_added" in result and isinstance(result["rows_added"], int)
+
+
+def test_rqa04_detect_tab_keyword_match():
+    """detect_tab() returns 'Shipping Labels' for a card name containing 'label'."""
+    from pipeline.sheets_writer import detect_tab
+
+    result = detect_tab("Generate FedEx Label", "TC-1: generate label with signature")
+
+    assert result == "Shipping Labels"
