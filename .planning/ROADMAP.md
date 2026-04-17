@@ -16,7 +16,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 2: AI QA Agent Core** - Agentic browser loop, multi-carrier planning, and carrier-specific flows (completed 2026-04-16)
 - [ ] **Phase 3: Label + Docs + Pre-Requirements** - Label generation flows, document verification strategies, and pre-requirement injection
 - [x] **Phase 4: Pipeline Dashboard** - Streamlit UI, threading, stop button, and full pipeline orchestration (completed 2026-04-17)
-- [ ] **Phase 5: Full Dashboard UI** - 7-tab Streamlit app, MCSL branding, sidebar status/progress/KB sections
+- [x] **Phase 5: Full Dashboard UI** - 7-tab Streamlit app, MCSL branding, sidebar status/progress/KB sections (completed 2026-04-17)
 - [ ] **Phase 6: User Story + Move Cards + History** - User Story generation, AC refinement, Move Cards, History persistence
 - [ ] **Phase 7: Release QA Pipeline Core** - Release QA tab, per-card AC/validation/AI QA Agent, test case approval
 - [ ] **Phase 8: Slack + Sign Off** - Slack DM/channel integration, bug notifications, Sign Off tab
@@ -216,7 +216,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 2. AI QA Agent Core | 7/7 | Complete   | 2026-04-16 |
 | 3. Label + Docs + Pre-Requirements | 5/6 | In Progress|  |
 | 4. Pipeline Dashboard | 5/5 | Complete   | 2026-04-17 |
-| 5. Full Dashboard UI | 2/3 | In Progress|  |
+| 5. Full Dashboard UI | 3/3 | Complete   | 2026-04-17 |
 | 6. User Story + Move Cards + History | 0/3 | Not started |  |
 | 7. Release QA Pipeline Core | 0/4 | Not started |  |
 | 8. Slack + Sign Off | 0/3 | Not started |  |
