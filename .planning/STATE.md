@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: planning
-stopped_at: Completed 06-01-PLAN.md — user_story_writer and trello_client GREEN; 84 tests pass
-last_updated: "2026-04-17T11:26:36.958Z"
+stopped_at: Completed 06-02-PLAN.md — tab_us fully implemented; 19 dashboard tests pass; 91 total
+last_updated: "2026-04-17T11:29:30.730Z"
 last_activity: 2026-04-17 — Phase 4 complete; Phase 5-10 roadmap and requirements added
 progress:
   total_phases: 10
   completed_phases: 4
   total_plans: 29
-  completed_plans: 25
+  completed_plans: 26
   percent: 50
 ---
 
@@ -73,6 +73,7 @@ Progress: [█████░░░░░] 50% (plans: 21/42)
 | Phase 05-full-dashboard-ui P01 | 3 | 2 tasks | 2 files |
 | Phase 05-full-dashboard-ui P02 | 1 | 2 tasks | 2 files |
 | Phase 05-full-dashboard-ui P03 | 8 | 1 tasks | 2 files |
+| Phase 06-user-story-move-cards-history P02 | 2 | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -147,6 +148,8 @@ Recent decisions affecting current work:
 - [Phase 05-full-dashboard-ui]: Pipeline header placed in main() body so it appears above tabs in main content area
 - [Phase 06-user-story-move-cards-history]: move_card_to_list_by_id calls PUT /1/cards/{card_id} directly with idList=list_id — no name lookup, prevents stale-list-name errors
 - [Phase 06-user-story-move-cards-history]: US_WRITER_PROMPT references MCSL multi-carrier (FedEx, UPS, DHL, USPS) — RAG context helpers catch all exceptions and return fallback strings
+- [Phase 06-user-story-move-cards-history]: _save_history() only called when dry_run is False — consistent with all other Trello/write operations
+- [Phase 06-user-story-move-cards-history]: History helpers added at module level so 06-03 History tab can import them directly
 
 ### Pending Todos
 
@@ -158,6 +161,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-17T11:26:32.849Z
-Stopped at: Completed 06-01-PLAN.md — user_story_writer and trello_client GREEN; 84 tests pass
+Last session: 2026-04-17T11:29:30.728Z
+Stopped at: Completed 06-02-PLAN.md — tab_us fully implemented; 19 dashboard tests pass; 91 total
 Resume file: None
