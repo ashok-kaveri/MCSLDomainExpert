@@ -162,6 +162,12 @@ def _init_state() -> None:
         "us_existing_list":  "",
         "us_new_list_name":  "",
         "us_assign_members": [],
+        # Phase 6 — Move Cards tab (tab_devdone)
+        "dd_list_select":  "Dev Done",
+        "dd_move_target":  "Ready for QA",
+        "dd_cards":        [],
+        "dd_checked":      {},
+        "dd_select_all":   False,
     }
     for key, val in defaults.items():
         if key not in st.session_state:
@@ -709,13 +715,162 @@ def main() -> None:
                             st.error(f"Failed to create Trello card: {exc}")
 
     with tab_devdone:
-        st.info("Move Cards coming in Phase 6.")
+        st.subheader("🔀 Move Cards")
+        st.caption("Move Trello cards between lists in bulk with an audit comment.")
+
+        # ── List selectors ───────────────────────────────────────────────
+        # Fetch board lists (show empty selects if Trello not configured)
+        try:
+            from pipeline.trello_client import TrelloClient
+            _dd_tc = TrelloClient()
+            _dd_lists = _dd_tc.get_lists()
+            _dd_list_names = [l.name for l in _dd_lists]
+            _dd_list_id_map = {l.name: l.id for l in _dd_lists}
+        except Exception as exc:
+            st.warning(f"Could not connect to Trello: {exc}")
+            _dd_list_names = []
+            _dd_list_id_map = {}
+
+        col_src, col_tgt, col_load = st.columns([3, 3, 1])
+        with col_src:
+            source_list = st.selectbox(
+                "Source list",
+                _dd_list_names or ["Dev Done"],
+                key="dd_list_select",
+                index=0,
+            )
+        with col_tgt:
+            # Default target: "Ready for QA" if present, else first list
+            default_tgt_idx = 0
+            if "Ready for QA" in _dd_list_names:
+                default_tgt_idx = _dd_list_names.index("Ready for QA")
+            st.selectbox(
+                "Target list",
+                _dd_list_names or ["Ready for QA"],
+                key="dd_move_target",
+                index=default_tgt_idx,
+            )
+        with col_load:
+            st.write("")  # vertical align
+            load_btn = st.button("📥 Load", key="dd_load_btn")
+
+        if load_btn:
+            source_id = _dd_list_id_map.get(source_list, "")
+            if not source_id:
+                st.warning(f"List '{source_list}' not found on board.")
+            else:
+                with st.spinner("Loading cards…"):
+                    try:
+                        from pipeline.trello_client import TrelloClient
+                        tc = TrelloClient()
+                        cards = tc.get_cards_in_list(source_id)
+                        st.session_state["dd_cards"] = cards
+                        st.session_state["dd_checked"] = {c.id: False for c in cards}
+                        st.session_state["dd_select_all"] = False
+                    except Exception as exc:
+                        st.error(f"Failed to load cards: {exc}")
+
+        # ── Card list with checkboxes ────────────────────────────────────
+        cards = st.session_state.get("dd_cards", [])
+        if cards:
+            st.divider()
+            # Select-all toggle
+            select_all = st.checkbox(
+                f"Select all ({len(cards)} cards)",
+                key="dd_select_all",
+                value=st.session_state.get("dd_select_all", False),
+            )
+            if select_all:
+                for c in cards:
+                    st.session_state["dd_checked"][c.id] = True
+
+            # Per-card checkboxes
+            checked = st.session_state.get("dd_checked", {})
+            for card in cards:
+                checked[card.id] = st.checkbox(
+                    card.name,
+                    key=f"dd_chk_{card.id}",
+                    value=checked.get(card.id, False),
+                )
+            st.session_state["dd_checked"] = checked
+
+            # ── Move button ───────────────────────────────────────────────
+            n_checked = sum(1 for v in checked.values() if v)
+            move_target = st.session_state.get("dd_move_target", "")
+            if st.button(f"➡️ Move {n_checked} cards", key="dd_move_btn",
+                         type="primary", disabled=(n_checked == 0)):
+                target_id = _dd_list_id_map.get(move_target, "")
+                if not target_id:
+                    st.warning(f"Target list '{move_target}' not found.")
+                else:
+                    moved = 0
+                    errors = []
+                    with st.spinner(f"Moving {n_checked} cards…"):
+                        try:
+                            from pipeline.trello_client import TrelloClient
+                            tc = TrelloClient()
+                            for card in cards:
+                                if not checked.get(card.id):
+                                    continue
+                                try:
+                                    if not dry_run:
+                                        tc.move_card_to_list_by_id(card.id, target_id)
+                                        tc.add_comment(
+                                            card.id,
+                                            f"Moved to {move_target} by MCSL QA Pipeline",
+                                        )
+                                    moved += 1
+                                except Exception as exc:
+                                    errors.append(f"{card.name}: {exc}")
+                        except Exception as exc:
+                            st.error(f"Trello error: {exc}")
+
+                    if moved:
+                        st.success(
+                            f"{'(dry run) ' if dry_run else ''}Moved {moved} card(s) to **{move_target}**."
+                        )
+                        # Clear loaded cards after move
+                        st.session_state["dd_cards"] = []
+                        st.session_state["dd_checked"] = {}
+                    for err in errors:
+                        st.warning(err)
+        elif st.session_state.get("dd_cards") == []:
+            pass  # Not yet loaded — show nothing
 
     with tab_release:
         st.info("Release QA pipeline coming in Phase 7.")
 
     with tab_history:
-        st.info("Pipeline history coming in Phase 6.")
+        st.subheader("📋 Pipeline History")
+        st.caption("All approved pipeline runs persisted to data/pipeline_history.json.")
+
+        runs = st.session_state.get("pipeline_runs", {})
+
+        col_count, col_clear = st.columns([4, 1])
+        col_count.markdown(f"**{len(runs)} run(s) recorded**")
+        with col_clear:
+            if st.button("🗑️ Clear history", key="hist_clear_btn"):
+                st.session_state["pipeline_runs"] = {}
+                _save_history({})
+                st.rerun()
+
+        if not runs:
+            st.info("No history yet. Approved cards appear here after being pushed via User Story tab or Release QA.")
+        else:
+            for card_id, run in runs.items():
+                approved_at = run.get("approved_at", "")
+                card_name   = run.get("card_name", card_id)
+                label       = f"✅ {card_name}  ·  {approved_at}"
+                with st.expander(label, expanded=False):
+                    col1, col2 = st.columns(2)
+                    col1.markdown(f"**Release**  \n{run.get('release', '—')}")
+                    col2.markdown(f"**Approved at**  \n{approved_at or '—'}")
+                    if run.get("card_url"):
+                        st.markdown(f"[Open in Trello]({run['card_url']})")
+                    tc_text = run.get("test_cases", "")
+                    if tc_text:
+                        with st.expander("Test Cases preview", expanded=False):
+                            st.markdown(tc_text[:800] + ("…" if len(tc_text) > 800 else ""))
 
     with tab_signoff:
         st.info("Sign Off tab coming in Phase 8.")
