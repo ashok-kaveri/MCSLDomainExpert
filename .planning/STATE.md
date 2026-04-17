@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 04-01-PLAN.md — pipeline_dashboard.py scaffold, dark theme, session state init
-last_updated: "2026-04-17T02:08:08.686Z"
+stopped_at: Completed 04-02-PLAN.md — start_run() daemon thread, _run_pipeline() worker, Run button wired
+last_updated: "2026-04-17T02:22:28.955Z"
 last_activity: 2026-04-16 — 03-02 Actions Menu Label + Return Label flows in guide, tests activated
 progress:
   total_phases: 4
   completed_phases: 2
   total_plans: 23
-  completed_plans: 17
+  completed_plans: 18
   percent: 38
 ---
 
@@ -66,6 +66,7 @@ Progress: [████░░░░░░] 38%
 | Phase 03-label-docs-pre-requirements P04 | 11 | 2 tasks | 2 files |
 | Phase 03-label-docs-pre-requirements P05 | 7 | 2 tasks | 2 files |
 | Phase 04-pipeline-dashboard P01 | 14 | 2 tasks | 3 files |
+| Phase 04-pipeline-dashboard P02 | 8 | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -122,6 +123,8 @@ Recent decisions affecting current work:
 - [Phase 03-label-docs-pre-requirements]: 03-05: _verify_scenario had broken _zip_summary reference — replaced with _format_zip_for_context(action['_zip_content'])
 - [Phase 04-pipeline-dashboard]: STATUS_BADGE dict maps 4 verdict types to CSS pill HTML; STATUS_BADGE_MD for plain-markdown contexts
 - [Phase 04-pipeline-dashboard]: start_run and render_report are stubs (pass) — implemented by 04-02 and 04-04 respectively
+- [Phase 04-pipeline-dashboard]: _run_pipeline() accesses st.session_state dict keys only — never calls any st.* render functions (threading contract)
+- [Phase 04-pipeline-dashboard]: sav_result assigned before sav_running=False in _run_pipeline() — result-before-flag ordering prevents polling race condition
 
 ### Pending Todos
 
@@ -133,6 +136,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-17T02:08:08.683Z
-Stopped at: Completed 04-01-PLAN.md — pipeline_dashboard.py scaffold, dark theme, session state init
+Last session: 2026-04-17T02:22:28.953Z
+Stopped at: Completed 04-02-PLAN.md — start_run() daemon thread, _run_pipeline() worker, Run button wired
 Resume file: None
