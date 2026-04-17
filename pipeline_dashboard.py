@@ -11,9 +11,10 @@ from typing import Any
 import json
 from pathlib import Path
 
-# Load .env before any st.* calls so env vars are available on first render
-from dotenv import load_dotenv
-load_dotenv(dotenv_path=Path(__file__).resolve().parent / ".env", override=True)
+# Load .env before any st.* calls — find_dotenv() walks up parent dirs so it
+# works both from the project root and from git worktree subdirectories.
+from dotenv import load_dotenv, find_dotenv
+load_dotenv(find_dotenv(raise_error_if_not_found=False), override=True)
 
 import streamlit as st
 
