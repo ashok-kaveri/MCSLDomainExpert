@@ -292,3 +292,66 @@ def test_us_tab_history_saved_on_push():
         "_save_history is not callable on pipeline_dashboard module"
     assert callable(getattr(pipeline_dashboard, "_load_history", None)), \
         "_load_history is not callable on pipeline_dashboard module"
+
+
+# ---------------------------------------------------------------------------
+# Phase 6 Move Cards tab tests — MC-01
+# ---------------------------------------------------------------------------
+
+def test_mc_tab_source_and_target_present():
+    """MC-01: tab_devdone source contains selectbox keys and default list names."""
+    import inspect
+    import pipeline_dashboard
+    src = inspect.getsource(pipeline_dashboard)
+    assert "dd_list_select" in src, "dd_list_select not found in pipeline_dashboard source"
+    assert "dd_move_target" in src, "dd_move_target not found in pipeline_dashboard source"
+    assert "Dev Done" in src, "'Dev Done' default not found in pipeline_dashboard source"
+    assert "Ready for QA" in src, "'Ready for QA' default not found in pipeline_dashboard source"
+
+
+def test_mc_tab_move_uses_by_id():
+    """MC-01: Move Cards uses move_card_to_list_by_id and posts audit comment."""
+    import inspect
+    import pipeline_dashboard
+    src = inspect.getsource(pipeline_dashboard)
+    assert "move_card_to_list_by_id" in src, "move_card_to_list_by_id not found in pipeline_dashboard source"
+    assert "dd_chk_" in src, "dd_chk_ per-card key prefix not found in pipeline_dashboard source"
+    assert "add_comment" in src, "add_comment not found in pipeline_dashboard source"
+
+
+def test_mc_tab_select_all():
+    """MC-01: Move Cards has select-all toggle and dd_checked state."""
+    import inspect
+    import pipeline_dashboard
+    src = inspect.getsource(pipeline_dashboard)
+    assert "dd_select_all" in src, "dd_select_all not found in pipeline_dashboard source"
+    assert "dd_checked" in src, "dd_checked not found in pipeline_dashboard source"
+
+
+# ---------------------------------------------------------------------------
+# Phase 6 History tab tests — HIST-01
+# ---------------------------------------------------------------------------
+
+def test_hist_tab_renders_runs():
+    """HIST-01: tab_history renders from pipeline_runs and shows history fields."""
+    import inspect
+    import pipeline_dashboard
+    src = inspect.getsource(pipeline_dashboard)
+    assert "pipeline_runs" in src, "pipeline_runs not found in pipeline_dashboard source"
+    assert "approved_at" in src, "approved_at not found in pipeline_dashboard source"
+    assert "card_url" in src, "card_url not found in pipeline_dashboard source"
+    assert "Clear history" in src, "'Clear history' not found in pipeline_dashboard source"
+
+
+def test_hist_tab_load_from_disk():
+    """HIST-01: _load_history and _save_history are callable; _HISTORY_FILE is a Path."""
+    from pathlib import Path
+    import pipeline_dashboard
+    assert callable(getattr(pipeline_dashboard, "_load_history", None)), \
+        "_load_history is not callable on pipeline_dashboard module"
+    assert callable(getattr(pipeline_dashboard, "_save_history", None)), \
+        "_save_history is not callable on pipeline_dashboard module"
+    assert isinstance(pipeline_dashboard._HISTORY_FILE, Path), \
+        "_HISTORY_FILE is not a Path instance"
+    result = pipeline_dashboard._load_history()
+    assert isinstance(result, dict), "_load_history() did not return a dict"
