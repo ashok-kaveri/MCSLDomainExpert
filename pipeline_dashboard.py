@@ -497,7 +497,49 @@ def main() -> None:
         dry_run = st.toggle("🧪 Dry Run (no writes)", key="dry_run", value=False)
         st.caption("Generates output without writing to Trello, repo, or Sheets.")
 
+    # ── Pipeline header ────────────────────────────────────────────────────
+    st.markdown(
+        '<div class="pipeline-header">'
+        '<h1>🚚 MCSL QA Pipeline</h1>'
+        '<p>AI-powered QA orchestration for MCSL carriers</p>'
+        '</div>',
+        unsafe_allow_html=True,
+    )
+
+    # ── 7-tab layout ───────────────────────────────────────────────────────
+    tab_us, tab_devdone, tab_release, tab_history, tab_signoff, tab_manual, tab_run = st.tabs([
+        "📝 User Story",
+        "🔀 Move Cards",
+        "🚀 Release QA",
+        "📋 History",
+        "✅ Sign Off",
+        "✍️ Write Automation",
+        "▶️ Run Automation",
+    ])
+
+    with tab_us:
+        st.info("User Story generation coming in Phase 6.")
+
+    with tab_devdone:
+        st.info("Move Cards coming in Phase 6.")
+
+    with tab_release:
+        st.info("Release QA pipeline coming in Phase 7.")
+
+    with tab_history:
+        st.info("Pipeline history coming in Phase 6.")
+
+    with tab_signoff:
+        st.info("Sign Off tab coming in Phase 8.")
+
+    with tab_manual:
+        st.info("Write Automation coming in Phase 9.")
+
+    with tab_run:
+        st.info("Run Automation coming in Phase 10.")
+
 
 if __name__ == "__main__" or True:
     # Allow module import without running main(); Streamlit runs the module directly.
     _init_state()
+    main()

@@ -202,7 +202,6 @@ def test_ui01_seven_tabs():
     assert hasattr(pd, "_CSS")
 
 
-@pytest.mark.skip(reason="Wave 0 — implement in 05-03")
 def test_ui01_tab_stubs():
     import pipeline_dashboard as pd
     import inspect
