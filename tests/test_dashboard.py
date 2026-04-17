@@ -109,7 +109,6 @@ def test_dash04_stop_button():
 # DASH-05: Report render
 # ---------------------------------------------------------------------------
 
-@pytest.mark.skip(reason="wave:04-05")
 def test_dash05_report_render():
     from unittest.mock import patch, MagicMock
     import pipeline_dashboard as pd
@@ -117,7 +116,7 @@ def test_dash05_report_render():
     result = _minimal_result()
 
     with patch("pipeline_dashboard.st") as mock_st:
-        mock_st.columns.return_value = [MagicMock(), MagicMock(), MagicMock(), MagicMock()]
+        mock_st.columns.return_value = [MagicMock(), MagicMock(), MagicMock(), MagicMock(), MagicMock()]
         mock_st.expander.return_value.__enter__ = MagicMock(return_value=None)
         mock_st.expander.return_value.__exit__ = MagicMock(return_value=False)
         pd.render_report(result)

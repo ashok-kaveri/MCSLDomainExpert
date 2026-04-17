@@ -157,11 +157,64 @@ def start_run(
     t.start()
 
 
-# ── Report render stub (implemented in 04-04) ─────────────────────────────────
+# ── Report render (implemented in 04-04) ──────────────────────────────────────
 
 def render_report(result: dict) -> None:
-    """Render VerificationReport.to_dict() as styled scenario cards. Implemented in 04-04."""
-    pass  # 04-04 replaces this body
+    """Render VerificationReport.to_dict() as styled scenario cards."""
+    import base64
+    import io
+
+    # Handle error result (from _run_pipeline exception handler)
+    if "error" in result:
+        st.error(f"Pipeline error: {result['error']}")
+        return
+
+    # ── Summary header ──────────────────────────────────────────────────────
+    st.subheader(f"Report: {result.get('card_name', 'Unknown card')}")
+    summary = result.get("summary", {})
+    dur = result.get("duration_seconds", 0.0)
+
+    cols = st.columns(5)
+    cols[0].metric("Total",     result.get("total", 0))
+    cols[1].metric("Pass",      summary.get("pass", 0))
+    cols[2].metric("Fail",      summary.get("fail", 0))
+    cols[3].metric("Partial",   summary.get("partial", 0))
+    cols[4].metric("QA Needed", summary.get("qa_needed", 0))
+    st.caption(f"Duration: {dur:.1f}s")
+    st.divider()
+
+    # ── Per-scenario cards ──────────────────────────────────────────────────
+    for sc in result.get("scenarios", []):
+        status       = sc.get("status", "qa_needed")
+        badge_md     = STATUS_BADGE_MD.get(status, status.upper())
+        scenario_title = sc.get("scenario", "")[:80]
+
+        with st.expander(f"{badge_md}  {scenario_title}"):
+            # Badge pill (HTML — unsafe_allow_html works inside expander body)
+            badge_html  = STATUS_BADGE.get(status, f"<span>{status.upper()}</span>")
+            carrier_tag = sc.get("carrier", "")
+            finding     = sc.get("finding", "No finding recorded")
+            steps_taken = sc.get("steps_taken", 0)
+
+            card_html = (
+                f'<div class="scenario-card {status}">'
+                f"  {badge_html}"
+                + (f"  &nbsp;&nbsp;<strong>{carrier_tag}</strong>" if carrier_tag else "")
+                + '  <hr style="margin:8px 0; border-color:#2a2d3a;">'
+                f'  <p style="margin:4px 0;">{finding}</p>'
+                f"</div>"
+            )
+            st.markdown(card_html, unsafe_allow_html=True)
+            st.caption(f"Steps taken: {steps_taken}")
+
+            # Screenshot thumbnail
+            scr = sc.get("evidence_screenshot", "")
+            if scr:
+                try:
+                    img_bytes = base64.b64decode(scr)
+                    st.image(io.BytesIO(img_bytes), use_container_width=True)
+                except Exception:  # noqa: BLE001
+                    st.caption("(screenshot decode error)")
 
 
 # ── Page config ───────────────────────────────────────────────────────────────
