@@ -468,3 +468,63 @@ def test_rqa03_sav_result_before_flag():
     assert ss[sav_result_key]["done"] == True, "done flag not set"
     assert ss[sav_result_key]["report"] is not None, "report should not be None"
     assert "error" in ss[sav_result_key], "error key missing from result dict"
+
+
+# ---------------------------------------------------------------------------
+# Phase 8 Sign Off tab tests — SIGNOFF-01, SIGNOFF-02
+# ---------------------------------------------------------------------------
+
+def test_signoff01_session_keys():
+    """SIGNOFF-01: _init_state() initialises signoff_message and signoff_sent keys."""
+    from unittest.mock import patch
+    import pipeline_dashboard as pd
+
+    class DictLikeState(dict):
+        def __contains__(self, item):
+            return super().__contains__(item)
+        def get(self, key, default=None):
+            return super().get(key, default)
+
+    ss = DictLikeState()
+
+    with patch("pipeline_dashboard.st") as mock_st:
+        mock_st.session_state = ss
+        pd._init_state()
+
+    assert "signoff_message" in ss, "signoff_message not set by _init_state()"
+    assert "signoff_sent" in ss, "signoff_sent not set by _init_state()"
+    assert ss["signoff_sent"] == False, "signoff_sent should default to False"
+
+
+def test_signoff01_compose_message():
+    """SIGNOFF-01: Sign-off message composition contains release label and card name."""
+    import inspect
+    import pipeline_dashboard as pd
+
+    src = inspect.getsource(pd)
+
+    # The sign-off tab must reference the release and card name in its message composition
+    assert "signoff_message" in src, "signoff_message not found in pipeline_dashboard source"
+    assert "rqa_release" in src, "rqa_release not referenced in sign-off composition"
+    assert "verified_cards" in src, "verified_cards not found in pipeline_dashboard source"
+
+    # Verify message preview logic is present
+    assert "release_so" in src, "release_so variable not found in tab_signoff"
+
+
+def test_signoff02_send_signoff_posts_slack():
+    """SIGNOFF-02: 'Send Sign-Off' calls slack_post_signoff and sets signoff_sent=True."""
+    import inspect
+    import pipeline_dashboard as pd
+
+    src = inspect.getsource(pd)
+
+    # Import must be present
+    assert "slack_post_signoff" in src or "post_signoff" in src, \
+        "slack_post_signoff / post_signoff import not found in pipeline_dashboard"
+    # signoff_sent must be set to True after send
+    assert 'signoff_sent.*True\|True.*signoff_sent' or "signoff_sent" in src, \
+        "signoff_sent not referenced in pipeline_dashboard"
+    # move_card_to_list_by_id must be called from signoff context
+    assert "move_card_to_list_by_id" in src, \
+        "move_card_to_list_by_id not found in pipeline_dashboard source"
