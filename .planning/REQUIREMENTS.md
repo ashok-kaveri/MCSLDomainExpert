@@ -243,7 +243,7 @@
 | AUTO-01 | Phase 9 | Complete |
 | AUTO-02 | Phase 9 | Complete |
 | AUTO-03 | Phase 9 | Complete |
-| RUN-01 | Phase 10 | Pending |
+| RUN-01 | Phase 10 | Complete |
 | CHAT-01 | Phase 10 | Pending |
 | CHAT-02 | Phase 10 | Pending |
 

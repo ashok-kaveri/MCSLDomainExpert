@@ -21,7 +21,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 7: Release QA Pipeline Core** - Release QA tab, per-card AC/validation/AI QA Agent, test case approval (completed 2026-04-17)
 - [x] **Phase 8: Slack + Sign Off** - Slack DM/channel integration, bug notifications, Sign Off tab (completed 2026-04-18)
 - [x] **Phase 9: Automation Writing** - Write Automation tab, Playwright POM+spec generation, Chrome Agent, git push (completed 2026-04-18)
-- [ ] **Phase 10: Run Automation + Domain Expert Chat** - Run Automation tab, test results, Domain Expert Chat app
+- [x] **Phase 10: Run Automation + Domain Expert Chat** - Run Automation tab, test results, Domain Expert Chat app (completed 2026-04-18)
 
 ## Phase Details
 
@@ -221,4 +221,4 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 7. Release QA Pipeline Core | 4/4 | Complete   | 2026-04-17 |
 | 8. Slack + Sign Off | 3/3 | Complete   | 2026-04-18 |
 | 9. Automation Writing | 3/3 | Complete   | 2026-04-18 |
-| 10. Run Automation + Domain Expert Chat | 0/3 | Not started |  |
+| 10. Run Automation + Domain Expert Chat | 3/3 | Complete   | 2026-04-18 |
