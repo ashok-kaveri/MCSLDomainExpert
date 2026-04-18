@@ -417,9 +417,9 @@ def main() -> None:
         if config.MCSL_AUTOMATION_REPO_PATH:
             st.session_state["automation_code_path"] = config.MCSL_AUTOMATION_REPO_PATH
         if config.STOREPEPSAAS_SERVER_PATH:
-            st.session_state["be_repo_path"] = config.STOREPEPSAAS_SERVER_PATH
-        if config.STOREPEPSAAS_CLIENT_PATH:
-            st.session_state["fe_repo_path"] = config.STOREPEPSAAS_CLIENT_PATH
+            st.session_state["mcsl_code_path"] = config.STOREPEPSAAS_SERVER_PATH
+        if getattr(config, "WIKI_PATH", ""):
+            st.session_state["wiki_path"] = config.WIKI_PATH
         st.session_state["code_paths_initialized"] = True
 
     # ── Sidebar ────────────────────────────────────────────────────────────
@@ -474,28 +474,32 @@ def main() -> None:
         # ── Code Knowledge Base ───────────────────────────────────────────
         st.subheader("Code Knowledge Base")
 
-        # Automation Code
-        with st.expander("🧪 Automation Code"):
+        # ── Automation Code ───────────────────────────────────────────────
+        with st.expander("✍️ Automation Code"):
             auto_path = st.text_input(
                 "Repo path", key="automation_code_path",
                 value=st.session_state.get("automation_code_path", ""),
                 placeholder="/path/to/mcsl-test-automation",
             )
-            auto_branch_options = []
+            auto_info = {}
             if auto_path:
                 try:
                     from rag.code_indexer import get_repo_info
-                    info = get_repo_info(auto_path)
-                    auto_branch_options = info.get("branches", [])
+                    auto_info = get_repo_info(auto_path)
                 except Exception:  # noqa: BLE001
                     pass
-            if auto_branch_options:
-                st.selectbox("Branch", auto_branch_options, key="auto_branch_select")
+            auto_branches = auto_info.get("branches", [])
+            auto_current = auto_info.get("current_branch", "")
+            if auto_branches:
+                _auto_idx = auto_branches.index(auto_current) if auto_current in auto_branches else 0
+                st.selectbox("Branch", auto_branches, index=_auto_idx, key="auto_branch_select")
+            elif auto_path:
+                st.caption(f"Branch: {auto_current or 'unknown'}" if auto_current else "⚠️ Branch info unavailable")
             col_sync, col_idx = st.columns(2)
             with col_sync:
                 if st.button("Pull & Sync", key="auto_sync_btn"):
                     from rag.code_indexer import sync_from_git
-                    branch = st.session_state.get("auto_branch_select", "main")
+                    branch = st.session_state.get("auto_branch_select", auto_current or "main")
                     with st.spinner("Syncing…"):
                         sync_from_git(auto_path, "automation", branch)
                     st.success("Synced.")
@@ -506,69 +510,76 @@ def main() -> None:
                         index_codebase(auto_path, "automation", clear_existing=True)
                     st.success("Re-indexed.")
 
-        # Backend / Server Code
-        with st.expander("🖥️ Backend/Server Code"):
-            be_path = st.text_input(
-                "Repo path", key="be_repo_path",
-                value=st.session_state.get("be_repo_path", ""),
-                placeholder="/path/to/storepepsaas/server",
+        # ── MCSL App Code (single repo — server + client) ─────────────────
+        with st.expander("🏪 MCSL App Code"):
+            mcsl_code_path = st.text_input(
+                "Repo path", key="mcsl_code_path",
+                value=st.session_state.get("mcsl_code_path", ""),
+                placeholder="/path/to/storepep-react/storepepSAAS/server/src/shared",
             )
-            be_branch_options = []
-            if be_path:
+            mcsl_info = {}
+            if mcsl_code_path:
                 try:
                     from rag.code_indexer import get_repo_info
-                    info = get_repo_info(be_path)
-                    be_branch_options = info.get("branches", [])
+                    mcsl_info = get_repo_info(mcsl_code_path)
                 except Exception:  # noqa: BLE001
                     pass
-            if be_branch_options:
-                st.selectbox("Branch", be_branch_options, key="be_branch_select")
+            mcsl_branches = mcsl_info.get("branches", [])
+            mcsl_current = mcsl_info.get("current_branch", "")
+            if mcsl_branches:
+                _mcsl_idx = mcsl_branches.index(mcsl_current) if mcsl_current in mcsl_branches else 0
+                st.selectbox("Branch", mcsl_branches, index=_mcsl_idx, key="mcsl_branch_select")
+            elif mcsl_code_path:
+                st.caption(f"Branch: {mcsl_current or 'unknown'}" if mcsl_current else "⚠️ Branch info unavailable")
             col_sync, col_idx = st.columns(2)
             with col_sync:
-                if st.button("Pull & Sync", key="be_sync_btn"):
+                if st.button("Pull & Sync", key="mcsl_sync_btn"):
                     from rag.code_indexer import sync_from_git
-                    branch = st.session_state.get("be_branch_select", "main")
+                    branch = st.session_state.get("mcsl_branch_select", mcsl_current or "main")
                     with st.spinner("Syncing…"):
-                        sync_from_git(be_path, "storepepsaas_server", branch)
+                        sync_from_git(mcsl_code_path, "storepepsaas_server", branch)
                     st.success("Synced.")
             with col_idx:
-                if st.button("Full Re-index", key="be_reindex_btn"):
+                if st.button("Full Re-index", key="mcsl_reindex_btn"):
                     from rag.code_indexer import index_codebase
                     with st.spinner("Re-indexing…"):
-                        index_codebase(be_path, "storepepsaas_server", clear_existing=True)
+                        index_codebase(mcsl_code_path, "storepepsaas_server", clear_existing=True)
                     st.success("Re-indexed.")
 
-        # Frontend / Client Code
-        with st.expander("🌐 Frontend/Client Code"):
-            fe_path = st.text_input(
-                "Repo path", key="fe_repo_path",
-                value=st.session_state.get("fe_repo_path", ""),
-                placeholder="/path/to/storepepsaas/client",
+        # ── MCSL Wiki (documents) ─────────────────────────────────────────
+        with st.expander("📖 MCSL Wiki"):
+            wiki_path = st.text_input(
+                "Wiki path", key="wiki_path",
+                value=st.session_state.get("wiki_path", getattr(config, "WIKI_PATH", "")),
+                placeholder="/path/to/mcsl-wiki/wiki",
             )
-            fe_branch_options = []
-            if fe_path:
-                try:
-                    from rag.code_indexer import get_repo_info
-                    info = get_repo_info(fe_path)
-                    fe_branch_options = info.get("branches", [])
-                except Exception:  # noqa: BLE001
-                    pass
-            if fe_branch_options:
-                st.selectbox("Branch", fe_branch_options, key="fe_branch_select")
-            col_sync, col_idx = st.columns(2)
-            with col_sync:
-                if st.button("Pull & Sync", key="fe_sync_btn"):
-                    from rag.code_indexer import sync_from_git
-                    branch = st.session_state.get("fe_branch_select", "main")
-                    with st.spinner("Syncing…"):
-                        sync_from_git(fe_path, "storepepsaas_client", branch)
-                    st.success("Synced.")
-            with col_idx:
-                if st.button("Full Re-index", key="fe_reindex_btn"):
-                    from rag.code_indexer import index_codebase
-                    with st.spinner("Re-indexing…"):
-                        index_codebase(fe_path, "storepepsaas_client", clear_existing=True)
-                    st.success("Re-indexed.")
+            if wiki_path:
+                from pathlib import Path as _Path
+                _wiki_exists = _Path(wiki_path).exists()
+                if _wiki_exists:
+                    _md_count = len(list(_Path(wiki_path).rglob("*.md")))
+                    st.caption(f"{_md_count} markdown files found")
+                else:
+                    st.warning("⚠️ Wiki path not found")
+            if st.button("Re-index Wiki", key="wiki_reindex_btn", disabled=not wiki_path):
+                with st.spinner("Indexing wiki docs…"):
+                    try:
+                        import os as _os
+                        _orig_wiki = _os.environ.get("WIKI_PATH", "")
+                        _os.environ["WIKI_PATH"] = wiki_path
+                        from ingest.wiki_loader import load_wiki_docs
+                        from rag.vectorstore import get_vectorstore
+                        _docs = load_wiki_docs()
+                        if _docs:
+                            _vs = get_vectorstore()
+                            _vs.add_documents(_docs)
+                            st.success(f"✅ Indexed {len(_docs)} wiki chunks.")
+                        else:
+                            st.warning("No wiki documents found.")
+                        if _orig_wiki:
+                            _os.environ["WIKI_PATH"] = _orig_wiki
+                    except Exception as _wiki_err:
+                        st.error(f"Wiki index failed: {_wiki_err}")
 
         st.divider()
 

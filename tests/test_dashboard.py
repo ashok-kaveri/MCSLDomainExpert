@@ -234,9 +234,11 @@ def test_ui04_knowledge_base():
     import pipeline_dashboard as pd
     import inspect
     src = inspect.getsource(pd)
+    # Single "MCSL App Code" section replaces separate backend/frontend
     assert "storepepsaas_server" in src
-    assert "storepepsaas_client" in src
     assert "MCSL_AUTOMATION_REPO_PATH" in src
+    # Wiki section added
+    assert "WIKI_PATH" in src or "wiki_path" in src
     assert "BACKEND_CODE_PATH" not in src
     assert "FRONTEND_CODE_PATH" not in src
 
