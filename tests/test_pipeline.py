@@ -761,3 +761,47 @@ def test_auto02_explore_error():
     assert result.error != ""
     assert "browser unavailable" in result.error
     assert result.ax_tree_text == ""
+
+
+# ---------------------------------------------------------------------------
+# AUTO-03: push_to_branch() — git push to automation feature branch
+# ---------------------------------------------------------------------------
+
+def test_auto03_git_push():
+    """push_to_branch() calls git checkout, add, commit, push with cwd=repo_path and returns (True, branch_name)."""
+    from unittest.mock import patch, MagicMock
+
+    mock_run_result = MagicMock()
+    mock_run_result.returncode = 0
+
+    with patch("subprocess.run", return_value=mock_run_result) as mock_run:
+        from pipeline.automation_writer import push_to_branch
+        result = push_to_branch(
+            "/fake/repo",
+            "Label Generation",
+            ["support/pages/labelGen/labelGenPage.ts", "tests/labelGen/labelGen.spec.ts"],
+        )
+
+    assert result[0] is True, f"Expected success=True, got {result}"
+    assert "automation/label" in result[1], f"Expected branch name with 'automation/label', got {result[1]}"
+    assert mock_run.call_count >= 4, f"Expected at least 4 subprocess.run calls, got {mock_run.call_count}"
+    for call_args in mock_run.call_args_list:
+        assert call_args.kwargs.get("cwd") == "/fake/repo", (
+            f"Expected cwd='/fake/repo' but got {call_args.kwargs.get('cwd')}"
+        )
+
+
+def test_auto03_git_error():
+    """push_to_branch() returns (False, stderr_string) on CalledProcessError — never raises."""
+    import subprocess
+    from unittest.mock import patch
+
+    with patch(
+        "subprocess.run",
+        side_effect=subprocess.CalledProcessError(1, "git push", stderr="remote rejected"),
+    ):
+        from pipeline.automation_writer import push_to_branch
+        result = push_to_branch("/fake/repo", "Feature Name", ["file.ts"])
+
+    assert result[0] is False, f"Expected success=False, got {result}"
+    assert "remote rejected" in result[1], f"Expected 'remote rejected' in error msg, got {result[1]}"
