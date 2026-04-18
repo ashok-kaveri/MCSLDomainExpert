@@ -200,6 +200,10 @@ def _init_state() -> None:
         "auto_result":         None,
         "auto_exploration":    None,
         "auto_explore_running": False,
+        # Phase 10 — Run Automation tab
+        "run_running":        False,
+        "run_result":         None,
+        "run_selected_specs": [],
     }
     for key, val in defaults.items():
         if key not in st.session_state:
@@ -1767,7 +1771,127 @@ def main() -> None:
                                 st.error(f"Push error: {_push_err}")
 
     with tab_run:
-        st.info("Run Automation coming in Phase 10.")
+        st.subheader("▶️ Run Automation")
+        st.caption("Select Playwright spec files and run them directly from the dashboard.")
+
+        # Lazy import to avoid cold-start cost on every Streamlit reload
+        from pipeline.test_runner import enumerate_specs, run_release_tests, TestRunResult
+
+        repo_path = getattr(config, "MCSL_AUTOMATION_REPO_PATH", "")
+        if not repo_path or not Path(repo_path).exists():
+            st.warning(
+                "⚠️ MCSL_AUTOMATION_REPO_PATH is not set or does not exist. "
+                "Add it to .env:  MCSL_AUTOMATION_REPO_PATH=/path/to/mcsl-test-automation"
+            )
+        else:
+            # Auth state warning
+            auth_file = Path(repo_path) / "auth-chrome.json"
+            if not auth_file.exists():
+                st.warning(
+                    "⚠️ `auth-chrome.json` not found. "
+                    "Run `npx playwright test tests/setup/login.setup.ts` first to create it."
+                )
+
+            # Spec file tree with checkboxes
+            spec_groups = enumerate_specs(repo_path)
+            if not spec_groups:
+                st.info("No .spec.ts files found in the automation repo.")
+            else:
+                st.markdown("**Select specs to run:**")
+                selected: list[str] = []
+                for folder, paths in spec_groups.items():
+                    with st.expander(f"📁 {folder} ({len(paths)} specs)", expanded=False):
+                        for rel_path in paths:
+                            key = f"run_chk_{rel_path}"
+                            if st.checkbox(Path(rel_path).name, key=key):
+                                selected.append(rel_path)
+
+                # Project selector
+                project = st.selectbox(
+                    "Browser project",
+                    ["Google Chrome", "Safari", "Firefox"],
+                    key="run_project",
+                )
+
+                col_run, col_info = st.columns([1, 3])
+                with col_run:
+                    run_disabled = st.session_state["run_running"] or len(selected) == 0
+                    if st.button("▶ Run Selected", disabled=run_disabled, key="run_btn"):
+                        st.session_state["run_running"] = True
+                        st.session_state["run_result"] = None
+                        st.session_state["run_selected_specs"] = selected
+
+                        def _run_tests_thread(rp=repo_path, specs=selected, proj=project):
+                            try:
+                                res = run_release_tests(rp, specs, proj)
+                                st.session_state["run_result"] = res
+                            finally:
+                                st.session_state["run_running"] = False
+
+                        threading.Thread(target=_run_tests_thread, daemon=True).start()
+                        st.rerun()
+                with col_info:
+                    if st.session_state["run_running"]:
+                        st.info(f"⏳ Running {len(st.session_state['run_selected_specs'])} spec(s)…")
+                        st.rerun()
+                    elif len(selected) == 0:
+                        st.caption("Select at least one spec to enable Run.")
+
+            # Results display
+            run_result: TestRunResult | None = st.session_state.get("run_result")
+            if run_result is not None:
+                if run_result.error:
+                    st.error(f"❌ Run error: {run_result.error}")
+                else:
+                    st.divider()
+                    st.markdown("### Results")
+                    m1, m2, m3, m4 = st.columns(4)
+                    m1.metric("Total", run_result.total)
+                    m2.metric("Passed", run_result.passed, delta=None)
+                    m3.metric("Failed", run_result.failed, delta=None)
+                    m4.metric("Duration", f"{run_result.duration_ms / 1000:.1f}s")
+
+                    for spec in run_result.specs:
+                        icon = "✅" if spec.status == "passed" else (
+                            "❌" if spec.status == "failed" else (
+                            "⏭️" if spec.status == "skipped" else "⏱️"))
+                        st.markdown(
+                            f"{icon} `{spec.file}` — **{spec.title}** "
+                            f"({spec.duration_ms}ms)"
+                        )
+
+                    # Post to Slack
+                    st.divider()
+                    run_name = ", ".join(
+                        Path(p).stem for p in st.session_state.get("run_selected_specs", [])
+                    )[:80]
+                    if st.button("📨 Post Results to Slack", key="run_slack_btn"):
+                        from pipeline.slack_client import post_content_to_slack_channel
+                        lines = [f"*Automation Run: {run_name}*", ""]
+                        lines.append(
+                            f"Total: {run_result.total} | "
+                            f"Passed: {run_result.passed} | "
+                            f"Failed: {run_result.failed} | "
+                            f"Skipped: {run_result.skipped}"
+                        )
+                        lines.append(f"Duration: {run_result.duration_ms / 1000:.1f}s")
+                        lines.append("")
+                        for s in run_result.specs:
+                            ico = "✅" if s.status == "passed" else (
+                                "❌" if s.status == "failed" else "⏭️")
+                            lines.append(f"{ico} `{s.file}` — {s.title} ({s.duration_ms}ms)")
+                        msg = "\n".join(lines)
+                        try:
+                            resp = post_content_to_slack_channel(
+                                getattr(config, "SLACK_CHANNEL", "#qa-pipeline"),
+                                msg,
+                            )
+                            if resp.get("ok"):
+                                st.success("✅ Results posted to Slack.")
+                            else:
+                                st.error(f"Slack error: {resp.get('error', 'unknown')}")
+                        except Exception as _slack_err:
+                            st.error(f"Slack post failed: {_slack_err}")
 
 
 if __name__ == "__main__" or True:
