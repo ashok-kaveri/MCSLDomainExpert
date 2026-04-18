@@ -653,3 +653,93 @@ def test_slack02_get_card_members():
     assert isinstance(result, list)
     assert result[0]["id"] == "5e1a2b3c"
     assert result[0]["fullName"] == "Dev Person"
+
+
+# ---------------------------------------------------------------------------
+# AUTO-01: write_automation
+# ---------------------------------------------------------------------------
+
+_AUTO01_FAKE_RESPONSE = (
+    "=== POM FILE: support/pages/order_summary/orderSummaryPage.ts ===\n"
+    "import BasePage from '@pages/basePage';\n"
+    "class OrderSummaryPage extends BasePage {\n"
+    "  constructor(page) { super(page); this.btn = this.appFrame.locator('button'); }\n"
+    "}\n"
+    "export default OrderSummaryPage;\n"
+    "=== SPEC FILE: tests/order_summary/order_summary.spec.ts ===\n"
+    "import { test, expect } from '@setup/fixtures';\n"
+    "test.describe.configure({ mode: \"serial\" });\n"
+    "test.describe(\"OrderSummary\", () => {\n"
+    "  test.skip(!['mcsl-automation'].includes(process.env.SHOPIFY_STORE_NAME ?? ''), 'skip');\n"
+    "  test('Verify label', async () => {});\n"
+    "});\n"
+)
+
+
+def test_auto01_write_automation_returns_result():
+    """write_automation() returns AutomationResult with non-empty pom_code and spec_code."""
+    from unittest.mock import MagicMock, patch
+
+    fake_llm_response = MagicMock()
+    fake_llm_response.content = _AUTO01_FAKE_RESPONSE
+    mock_llm = MagicMock()
+    mock_llm.invoke.return_value = fake_llm_response
+
+    with patch("pipeline.automation_writer.ChatAnthropic", return_value=mock_llm):
+        from pipeline.automation_writer import write_automation
+        result = write_automation("order_summary", "- TC1: Verify label generates")
+
+    assert result.pom_code != ""
+    assert result.spec_code != ""
+    assert result.error == ""
+
+
+def test_auto01_spec_structure():
+    """Generated spec contains test.describe, @setup/fixtures import, and test.skip store guard."""
+    from unittest.mock import MagicMock, patch
+
+    fake_llm_response = MagicMock()
+    fake_llm_response.content = _AUTO01_FAKE_RESPONSE
+    mock_llm = MagicMock()
+    mock_llm.invoke.return_value = fake_llm_response
+
+    with patch("pipeline.automation_writer.ChatAnthropic", return_value=mock_llm):
+        from pipeline.automation_writer import write_automation
+        result = write_automation("order_summary", "- TC1: Verify label generates")
+
+    assert "test.describe" in result.spec_code
+    assert "@setup/fixtures" in result.spec_code
+    assert "test.skip" in result.spec_code
+
+
+def test_auto01_pom_structure():
+    """Generated POM contains BasePage extension, this.appFrame locators, and export default."""
+    from unittest.mock import MagicMock, patch
+
+    fake_llm_response = MagicMock()
+    fake_llm_response.content = _AUTO01_FAKE_RESPONSE
+    mock_llm = MagicMock()
+    mock_llm.invoke.return_value = fake_llm_response
+
+    with patch("pipeline.automation_writer.ChatAnthropic", return_value=mock_llm):
+        from pipeline.automation_writer import write_automation
+        result = write_automation("order_summary", "- TC1: Verify label generates")
+
+    assert "BasePage" in result.pom_code
+    assert "this.appFrame" in result.pom_code
+    assert "export default" in result.pom_code
+
+
+def test_auto01_no_api_key():
+    """write_automation() returns AutomationResult with error when ANTHROPIC_API_KEY is absent — never raises."""
+    from unittest.mock import patch
+    import pipeline.automation_writer as aw_mod
+
+    with patch.object(aw_mod, "config") as mock_cfg:
+        mock_cfg.ANTHROPIC_API_KEY = ""
+        mock_cfg.CLAUDE_SONNET_MODEL = "claude-sonnet-4-6"
+        from pipeline.automation_writer import write_automation
+        result = write_automation("order_summary", "- TC1: Verify label generates")
+
+    assert result.error != ""
+    assert result.pom_code == ""
