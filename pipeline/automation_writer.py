@@ -197,3 +197,41 @@ def write_automation(
         logger.exception("write_automation failed for feature '%s'", feature_name)
         _empty.error = str(exc)
         return _empty
+
+
+def push_to_branch(
+    repo_path: str,
+    feature_name: str,
+    files: list[str],
+) -> tuple[bool, str]:
+    """Stage generated files and push to a feature branch.
+
+    Branch: automation/{feature_snake} (special chars -> hyphens, lowercased)
+    Uses cwd=repo_path on all subprocess calls — never os.chdir().
+    Returns (True, branch_name) on success, (False, error_message) on failure.
+    """
+    import subprocess
+
+    branch = "automation/" + re.sub(r"[^a-z0-9]+", "-", feature_name.lower()).strip("-")
+    try:
+        subprocess.run(
+            ["git", "checkout", "-B", branch],
+            cwd=repo_path, check=True, capture_output=True, text=True,
+        )
+        subprocess.run(
+            ["git", "add"] + files,
+            cwd=repo_path, check=True, capture_output=True, text=True,
+        )
+        subprocess.run(
+            ["git", "commit", "-m", f"feat(automation): add {feature_name} POM + spec"],
+            cwd=repo_path, check=True, capture_output=True, text=True,
+        )
+        subprocess.run(
+            ["git", "push", "-u", "origin", branch],
+            cwd=repo_path, check=True, capture_output=True, text=True,
+        )
+        return True, branch
+    except subprocess.CalledProcessError as exc:
+        return False, exc.stderr if isinstance(exc.stderr, str) else (exc.stderr or str(exc))
+    except Exception as exc:  # noqa: BLE001
+        return False, str(exc)

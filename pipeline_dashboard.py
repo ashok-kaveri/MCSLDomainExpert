@@ -194,6 +194,12 @@ def _init_state() -> None:
         # Phase 8 — Sign Off tab
         "signoff_message": "",
         "signoff_sent":    False,
+        # Phase 9 — Write Automation tab
+        "auto_feature":        "",
+        "auto_test_cases":     "",
+        "auto_result":         None,
+        "auto_exploration":    None,
+        "auto_explore_running": False,
     }
     for key, val in defaults.items():
         if key not in st.session_state:
@@ -1316,6 +1322,57 @@ def main() -> None:
                     else:
                         st.info("Generate test cases in Step 3 before approving.")
 
+                    st.divider()
+
+                    # ── Step 5: Write Automation ──────────────────────────────
+                    st.markdown("### Step 5: Write Automation")
+
+                    _auto_tc_src = st.session_state.get(f"tc_text_{card.id}", "").strip()
+                    _is_approved_for_auto = approved_store.get(card.id, False)
+
+                    if not _is_approved_for_auto:
+                        st.info("Approve test cases in Step 4 before writing automation.")
+                    else:
+                        with st.expander("⚙️ Generate Playwright automation for this card", expanded=False):
+                            _auto_feat_key = f"auto_feat_{card.id}"
+                            _auto_res_key = f"auto_res_{card.id}"
+                            _auto_feat_val = st.text_input(
+                                "Feature name",
+                                value=st.session_state.get(_auto_feat_key, card.name),
+                                key=f"auto_feat_input_{card.id}",
+                            )
+                            st.session_state[_auto_feat_key] = _auto_feat_val
+                            _auto_tc_display = st.text_area(
+                                "Test cases (from Step 3)",
+                                value=_auto_tc_src,
+                                height=150,
+                                key=f"auto_tc_display_{card.id}",
+                            )
+                            if st.button("⚙️ Generate", key=f"auto_gen_{card.id}", type="primary"):
+                                with st.spinner("Generating automation..."):
+                                    try:
+                                        from pipeline.automation_writer import write_automation
+                                        _card_auto_result = write_automation(
+                                            feature_name=_auto_feat_val.strip() or card.name,
+                                            test_cases_markdown=_auto_tc_display.strip(),
+                                        )
+                                        st.session_state[_auto_res_key] = _card_auto_result
+                                    except Exception as _ae:
+                                        st.error(f"Automation generation failed: {_ae}")
+                                st.rerun()
+
+                            _card_auto_result = st.session_state.get(_auto_res_key)
+                            if _card_auto_result:
+                                if _card_auto_result.error:
+                                    st.error(f"❌ {_card_auto_result.error}")
+                                else:
+                                    st.success("✅ Code generated")
+                                    _pt, _st = st.tabs(["POM", "Spec"])
+                                    with _pt:
+                                        st.code(_card_auto_result.pom_code, language="typescript")
+                                    with _st:
+                                        st.code(_card_auto_result.spec_code, language="typescript")
+
                     # Phase 8: Auto-DM developers on failed verdict
                     _result_done = st.session_state.get(f"sav_result_{card.id}", {})
                     _rpt_done = st.session_state.get(f"sav_report_{card.id}")
@@ -1573,7 +1630,141 @@ def main() -> None:
                             st.rerun()
 
     with tab_manual:
-        st.info("Write Automation coming in Phase 9.")
+        st.markdown("## ✍️ Write Automation")
+        st.markdown("Generate Playwright TypeScript POM + spec files from test cases.")
+        st.divider()
+
+        _auto_feature = st.text_input(
+            "Feature Name",
+            value=st.session_state.get("auto_feature", ""),
+            placeholder="e.g. Label Generation, Carrier Configuration",
+            key="auto_feature_input",
+        )
+        st.session_state["auto_feature"] = _auto_feature
+
+        _auto_tcs = st.text_area(
+            "Test Cases (markdown)",
+            value=st.session_state.get("auto_test_cases", ""),
+            height=200,
+            placeholder="## TC-01\nGiven...\nWhen...\nThen...",
+            key="auto_tc_input",
+        )
+        st.session_state["auto_test_cases"] = _auto_tcs
+
+        # Optional Chrome Agent exploration
+        with st.expander("🔍 Explore live app (optional — captures element selectors)", expanded=False):
+            st.markdown("Run the Chrome Agent to capture live MCSL app elements for better selector generation.")
+            _explore_clicked = st.button(
+                "🤖 Run Chrome Agent",
+                key="btn_chrome_explore",
+                disabled=not _auto_feature.strip() or st.session_state.get("auto_explore_running", False),
+            )
+            if _explore_clicked and _auto_feature.strip():
+                st.session_state["auto_explore_running"] = True
+                with st.spinner("Exploring MCSL app..."):
+                    try:
+                        from pipeline.chrome_agent import explore_feature
+                        _exploration = explore_feature(_auto_feature.strip())
+                        st.session_state["auto_exploration"] = _exploration
+                    except Exception as _exp_err:
+                        st.warning(f"Chrome Agent failed: {_exp_err}")
+                st.session_state["auto_explore_running"] = False
+                st.rerun()
+
+            _exploration_result = st.session_state.get("auto_exploration")
+            if _exploration_result:
+                if _exploration_result.error:
+                    st.warning(f"⚠️ Exploration error: {_exploration_result.error}")
+                else:
+                    st.success(f"✅ Explored: {_exploration_result.nav_destination}")
+                    st.caption(f"AX tree captured ({len(_exploration_result.ax_tree_text)} chars)")
+
+        st.divider()
+
+        _gen_auto_clicked = st.button(
+            "⚙️ Generate Automation Code",
+            key="btn_gen_auto",
+            type="primary",
+            disabled=not (_auto_feature.strip() and _auto_tcs.strip()),
+        )
+
+        if _gen_auto_clicked:
+            with st.spinner("Generating Playwright automation..."):
+                try:
+                    from pipeline.automation_writer import write_automation
+                    _exploration_data = ""
+                    _exp = st.session_state.get("auto_exploration")
+                    if _exp and not _exp.error:
+                        _exploration_data = _exp.elements_json
+                    _auto_result = write_automation(
+                        feature_name=_auto_feature.strip(),
+                        test_cases_markdown=_auto_tcs.strip(),
+                        exploration_data=_exploration_data,
+                    )
+                    st.session_state["auto_result"] = _auto_result
+                except Exception as _auto_err:
+                    st.error(f"Code generation failed: {_auto_err}")
+            st.rerun()
+
+        _auto_result = st.session_state.get("auto_result")
+        if _auto_result:
+            if _auto_result.error:
+                st.error(f"❌ Generation failed: {_auto_result.error}")
+            else:
+                st.success("✅ Automation code generated!")
+                _pom_tab, _spec_tab = st.tabs(["📄 POM", "🧪 Spec"])
+                with _pom_tab:
+                    st.caption(f"Path: `{_auto_result.pom_path}`")
+                    st.code(_auto_result.pom_code, language="typescript")
+                    st.download_button(
+                        "⬇️ Download POM",
+                        data=_auto_result.pom_code,
+                        file_name=_auto_result.pom_path.split("/")[-1] if _auto_result.pom_path else "page.ts",
+                        mime="text/plain",
+                        key="dl_pom",
+                    )
+                with _spec_tab:
+                    st.caption(f"Path: `{_auto_result.spec_path}`")
+                    st.code(_auto_result.spec_code, language="typescript")
+                    st.download_button(
+                        "⬇️ Download Spec",
+                        data=_auto_result.spec_code,
+                        file_name=_auto_result.spec_path.split("/")[-1] if _auto_result.spec_path else "spec.ts",
+                        mime="text/plain",
+                        key="dl_spec",
+                    )
+
+                st.divider()
+                st.markdown("### 🚀 Push to Git Branch")
+                _repo_path = getattr(__import__("config"), "MCSL_AUTOMATION_REPO_PATH", "")
+                if not _repo_path:
+                    st.warning("⚠️ MCSL_AUTOMATION_REPO_PATH not set in config.py — cannot push.")
+                else:
+                    _branch_preview = "automation/" + __import__("re").sub(r"[^a-z0-9]+", "-", _auto_feature.lower()).strip("-")
+                    st.caption(f"Branch: `{_branch_preview}`")
+                    if st.button("🚀 Push to Git Branch", key="btn_push_git", type="primary"):
+                        with st.spinner("Pushing to GitHub..."):
+                            try:
+                                from pipeline.automation_writer import push_to_branch
+                                import os
+                                _pom_abs = os.path.join(_repo_path, _auto_result.pom_path) if _auto_result.pom_path else ""
+                                _spec_abs = os.path.join(_repo_path, _auto_result.spec_path) if _auto_result.spec_path else ""
+                                # Write files first
+                                if _pom_abs and _auto_result.pom_code:
+                                    os.makedirs(os.path.dirname(_pom_abs), exist_ok=True)
+                                    open(_pom_abs, "w").write(_auto_result.pom_code)
+                                if _spec_abs and _auto_result.spec_code:
+                                    os.makedirs(os.path.dirname(_spec_abs), exist_ok=True)
+                                    open(_spec_abs, "w").write(_auto_result.spec_code)
+                                _files = [f for f in [_auto_result.pom_path, _auto_result.spec_path] if f]
+                                _pushed, _msg = push_to_branch(_repo_path, _auto_feature.strip(), _files)
+                                if _pushed:
+                                    st.success(f"✅ Pushed to branch `{_msg}`")
+                                    st.session_state["auto_result"] = __import__("dataclasses").replace(_auto_result, git_branch=_msg, git_pushed=True)
+                                else:
+                                    st.error(f"❌ Push failed: {_msg}")
+                            except Exception as _push_err:
+                                st.error(f"Push error: {_push_err}")
 
     with tab_run:
         st.info("Run Automation coming in Phase 10.")
