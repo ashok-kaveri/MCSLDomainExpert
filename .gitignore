@@ -17,6 +17,7 @@ build/
 .venv/
 venv/
 env/
+.planning/
 
 # ── ChromaDB / vector store ────────────────────────────────────────
 data/chroma_db/
