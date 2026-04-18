@@ -201,9 +201,9 @@ Plans:
 **Plans**: 3 plans
 
 Plans:
-- [ ] 10-01: pipeline/test_runner.py — run_release_tests() + Run Automation tab
-- [ ] 10-02: ui/chat_app.py — MCSL Domain Expert Chat with RAG
-- [ ] 10-03: Quick Questions, Knowledge Base refresh, final integration
+- [ ] 10-01-PLAN.md — pipeline/test_runner.py: SpecResult, TestRunResult, enumerate_specs, parse_playwright_json, run_release_tests (TDD, Wave 1)
+- [ ] 10-02-PLAN.md — ui/chat_app.py: ask_domain_expert() export + CHAT-01/CHAT-02 test stubs (TDD, Wave 1)
+- [ ] 10-03-PLAN.md — pipeline_dashboard.py: Run Automation tab full implementation + human verify checkpoint (Wave 2)
 
 ## Progress
 
