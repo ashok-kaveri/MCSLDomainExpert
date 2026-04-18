@@ -194,3 +194,17 @@ class TrelloClient:
             for a in actions
             if a.get("type") == "commentCard" and "data" in a and "text" in a["data"]
         ]
+
+    def get_card_members(self, card_id: str) -> list[dict]:
+        """Fetch members assigned to a card.
+        Returns list of {id, fullName, username} dicts.
+        """
+        data = self._get(f"cards/{card_id}/members")
+        return [
+            {
+                "id": m.get("id", ""),
+                "fullName": m.get("fullName", ""),
+                "username": m.get("username", ""),
+            }
+            for m in (data if isinstance(data, list) else [])
+        ]
