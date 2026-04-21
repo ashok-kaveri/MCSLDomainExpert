@@ -1,0 +1,10 @@
+{
+  "69e66829734937f199fd0491": {
+    "card_name": "From SL: ZI-021 — Enhancement: minimum customs value floor [#369144]",
+    "card_url": "https://trello.com/c/N7N9STzy/4212-from-sl-zi-021-enhancement-minimum-customs-value-floor-369144",
+    "release": "2.0",
+    "ac_generated_at": "2026-04-21T13:58:38",
+    "ac_preview": "## Pre-Writing Research Summary\n\n**Card type:** `bug_fix_or_customer_issue` — minimum customs value floor not enforced in destination currency after conversion.\n\n**Root cause (grounded in code analysis):** `getEnhanceDeclaredValue()` applies `Math.max(minimumPricePerProduct || 1, declaredValue)` in **source currency** (e.g., EUR). Downstream carrier request builders convert to destination currency (e.g., USD) *after* the floor is set. A 1 EUR product floors correctly in EUR but converts to ~0.92 USD — a sub-1 value the carrier rejects. No post-conversion floor exists.\n\n**Feature toggle:** `settings.disable.shipping.customValue.minValue` — must be **OFF** (floor enabled) for the fix to apply. ACs must cover both states.\n\n**Zendesk signal:** Immediate label failures on 4 orders; workaround was manual customs value update. Pain score 8/10. SLA breached.\n\n**Customs value field path:** `customInsuredValue` → set at package generation → passed to carrier request builder → converted to destination currency → sent to carrier.\n\n**KB grounding:** [Accurate Customs Amount on Commercial Invoice](https://www.pluginhive.com/knowledge-base/customs-amount-on-commercial-invoice/) confirms MCSL expo",
+    "ac_saved_at": "2026-04-21T14:02:52"
+  }
+}

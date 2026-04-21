@@ -88,6 +88,15 @@ _CODE_SPLITTER = RecursiveCharacterTextSplitter(
 
 _code_vs_instance: Chroma | None = None
 
+_CODE_COLLECTION_METADATA = {
+    "hnsw:space": "cosine",
+    "hnsw:construction_ef": 100,
+    "hnsw:search_ef": 100,
+    "hnsw:M": 16,
+    "hnsw:batch_size": 100,
+    "hnsw:sync_threshold": 1000,
+}
+
 
 def _get_code_vectorstore() -> Chroma:
     global _code_vs_instance
@@ -96,14 +105,7 @@ def _get_code_vectorstore() -> Chroma:
             collection_name=config.CHROMA_CODE_COLLECTION,
             embedding_function=get_embeddings(),
             persist_directory=config.CHROMA_PATH,
-            collection_metadata={
-                "hnsw:space": "cosine",
-                "hnsw:construction_ef": 100,
-                "hnsw:search_ef": 100,
-                "hnsw:M": 16,
-                "hnsw:batch_size": 100,
-                "hnsw:sync_threshold": 1000,
-            },
+            collection_metadata=_CODE_COLLECTION_METADATA,
         )
     return _code_vs_instance
 
@@ -111,6 +113,88 @@ def _get_code_vectorstore() -> Chroma:
 def _reset_code_vectorstore() -> None:
     global _code_vs_instance
     _code_vs_instance = None
+
+
+def _is_hnsw_index_error(exc: Exception) -> bool:
+    msg = str(exc).lower()
+    return "hnsw" in msg and (
+        "error loading" in msg
+        or "error creating" in msg
+        or "segment reader" in msg
+        or "backfill" in msg
+    )
+
+
+def _recreate_code_collection(reason: str) -> None:
+    """Drop only the code collection and reset the cached Chroma wrapper."""
+    _reset_code_vectorstore()
+    client = chromadb.PersistentClient(path=config.CHROMA_PATH)
+    try:
+        client.delete_collection(config.CHROMA_CODE_COLLECTION)
+        logger.warning("Recreated code ChromaDB collection after %s", reason)
+    except Exception as exc:
+        logger.debug(
+            "Code collection delete during recreate raised (ok if missing): %s",
+            exc,
+        )
+    finally:
+        _reset_code_vectorstore()
+
+
+def _clear_code_source_type(source_type: str) -> None:
+    """Remove chunks for one code source, recreating collection if HNSW is corrupt."""
+    _reset_code_vectorstore()
+    client = chromadb.PersistentClient(path=config.CHROMA_PATH)
+    try:
+        col = client.get_collection(config.CHROMA_CODE_COLLECTION)
+    except Exception:
+        logger.debug("Code collection does not exist yet; nothing to clear")
+        return
+
+    try:
+        col.delete(where={"source_type": source_type})
+        logger.info("Cleared existing '%s' code chunks", source_type)
+    except Exception as exc:
+        if _is_hnsw_index_error(exc):
+            logger.warning(
+                "Code ChromaDB HNSW index is corrupt while clearing %r; "
+                "recreating code collection: %s",
+                source_type,
+                exc,
+            )
+            _recreate_code_collection("HNSW clear failure")
+            return
+        raise
+    finally:
+        _reset_code_vectorstore()
+
+
+def _add_code_batch_with_recovery(
+    vs: Chroma,
+    batch_docs: list[Document],
+    batch_ids: list[str],
+) -> tuple[Chroma, bool]:
+    """Add one batch, recreating the code collection once if HNSW is corrupt."""
+    try:
+        try:
+            vs.delete(ids=batch_ids)
+        except Exception:
+            pass
+        vs.add_documents(batch_docs, ids=batch_ids)
+        return vs, False
+    except Exception as exc:
+        if not _is_hnsw_index_error(exc):
+            raise
+
+        logger.warning(
+            "Code ChromaDB HNSW index is corrupt while adding documents; "
+            "recreating code collection and retrying once: %s",
+            exc,
+        )
+        _recreate_code_collection("HNSW add failure")
+        recovered_vs = _get_code_vectorstore()
+        recovered_vs.add_documents(batch_docs, ids=batch_ids)
+        return recovered_vs, True
 
 
 # ---------------------------------------------------------------------------
@@ -167,13 +251,8 @@ def index_codebase(
     # Optionally clear previous index for this source_type
     if clear_existing:
         try:
-            client = chromadb.PersistentClient(path=config.CHROMA_PATH)
-            col = client.get_collection(config.CHROMA_CODE_COLLECTION)
-            # ChromaDB where filter
-            col.delete(where={"source_type": source_type})
-            _reset_code_vectorstore()
+            _clear_code_source_type(source_type)
             vs = _get_code_vectorstore()
-            logger.info("Cleared existing '%s' code chunks", source_type)
         except Exception as e:
             logger.warning("Clear existing failed (ok on first run): %s", e)
 
@@ -227,11 +306,7 @@ def index_codebase(
     for start in range(0, len(all_docs), _BATCH):
         batch_docs = all_docs[start: start + _BATCH]
         batch_ids  = all_ids[start: start + _BATCH]
-        try:
-            vs.delete(ids=batch_ids)
-        except Exception:
-            pass
-        vs.add_documents(batch_docs, ids=batch_ids)
+        vs, _recovered = _add_code_batch_with_recovery(vs, batch_docs, batch_ids)
         logger.info(
             "Code index batch %d–%d / %d chunks (%s)",
             start + 1, min(start + _BATCH, len(all_docs)), len(all_docs), source_type,

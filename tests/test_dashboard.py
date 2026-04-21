@@ -251,6 +251,129 @@ def test_ui07_dry_run_toggle():
     assert "Dry Run" in src or "dry run" in src.lower()
 
 
+def test_ui08_release_run_uses_persisted_automation_files():
+    import pipeline_dashboard as pd
+    import inspect
+
+    src = inspect.getsource(pd)
+    assert "_collect_release_spec_files(cards)" in src
+    assert "_collect_release_spec_map(cards)" in src
+    assert "automation_files" in src
+
+
+def test_collect_release_spec_files_merges_session_and_history():
+    import pipeline_dashboard as pd
+    from unittest.mock import patch
+
+    cards = [
+        types.SimpleNamespace(id="c1"),
+        types.SimpleNamespace(id="c2"),
+    ]
+    session_state = {
+        "pipeline_runs": {
+            "c1": {"automation_files": ["tests/from_history/history_a.spec.ts", "support/pages/a.ts"]},
+            "c2": {"automation_files": ["tests/shared/reused.spec.ts"]},
+        },
+        "rqa_auto_files_c1": ["tests/from_session/session_a.spec.ts", "support/pages/a.ts"],
+        "rqa_auto_files_c2": ["tests/shared/reused.spec.ts", "tests/from_session/session_b.spec.ts"],
+    }
+
+    with patch.object(pd.st, "session_state", session_state):
+        specs = pd._collect_release_spec_files(cards)
+
+    assert specs == [
+        "tests/from_history/history_a.spec.ts",
+        "tests/from_session/session_a.spec.ts",
+        "tests/from_session/session_b.spec.ts",
+        "tests/shared/reused.spec.ts",
+    ]
+
+
+def test_collect_release_spec_map_prefers_session_then_history():
+    import pipeline_dashboard as pd
+    from unittest.mock import patch
+
+    cards = [
+        types.SimpleNamespace(id="c1", name="Card One"),
+        types.SimpleNamespace(id="c2", name="Card Two"),
+    ]
+    session_state = {
+        "pipeline_runs": {
+            "c1": {"automation_files": ["tests/from_history/history_a.spec.ts"]},
+            "c2": {"automation_files": ["tests/from_history/history_b.spec.ts"]},
+        },
+        "rqa_auto_files_c1": ["tests/from_session/session_a.spec.ts"],
+    }
+
+    with patch.object(pd.st, "session_state", session_state):
+        spec_map = pd._collect_release_spec_map(cards)
+
+    assert spec_map == {
+        "Card One": "tests/from_session/session_a.spec.ts",
+        "Card Two": "tests/from_history/history_b.spec.ts",
+    }
+
+
+def test_ui09_release_run_has_fedex_parity_scope_and_fallbacks():
+    import pipeline_dashboard as pd
+    import inspect
+
+    src = inspect.getsource(pd)
+    assert "Full test suite" in src
+    assert "Run Automation appears only after a release spec file exists." in src
+    assert "Per-card breakdown:" in src
+    assert "Configure Slack to enable posting. You can copy the summary below manually." in src
+    assert "post_results(_run_result, _release_label)" in src
+
+
+def test_ui10_automation_step_uses_ai_qa_first_then_optional_live_explore():
+    import pipeline_dashboard as pd
+    import inspect
+
+    src = inspect.getsource(pd)
+    assert '① Write Automation Code' in src
+    assert "This step creates the release spec for this approved card." in src
+    assert "AI QA Agent already walked the app." in src
+    assert "🌐 Walk app live with Chrome Agent (grounded locators)" in src
+    assert "App path / nav hint (optional)" in src
+    assert "Generating automation from reviewed test cases + verified AI QA flow..." in src
+    assert "detect_feature" in src
+    assert "find_pom" in src
+    assert "🆕 New feature" in src or "✏️ Existing feature" in src
+    assert "manual only" in src
+    assert "Fixed: " in src
+    assert "AX lines" in src
+    assert "selector hints" in src
+    assert 'Generate Playwright automation for this card' not in src
+
+
+def test_ui11_generate_documentation_stage_present():
+    import pipeline_dashboard as pd
+    import inspect
+
+    src = inspect.getsource(pd)
+    assert '② Run Automation &amp; Post to Slack' in src
+    assert '③ Generate Documentation' in src
+    assert "Generate Docs for All Cards" in src
+    assert "docs/features/*.md" in src
+    assert "CHANGELOG entry" in src
+
+
+def test_ui12_bug_reporter_stage_present_after_docs():
+    import pipeline_dashboard as pd
+    import inspect
+
+    src = inspect.getsource(pd)
+    assert "🐛 Bug Reporter" in src
+    assert "Report a Bug Found During QA" in src
+    assert "Check Backlog & Draft Bug" in src
+    assert "Card being tested (optional)" in src
+    assert "bug_linked_card" in src
+    assert "check_and_draft_bug" in src
+    assert "Approve & Raise in Trello" in src
+    assert "raise_bug(" in src
+
+
 # ---------------------------------------------------------------------------
 # Phase 6 User Story tab tests — US-01, US-02, US-03
 # ---------------------------------------------------------------------------
@@ -294,6 +417,13 @@ def test_us_tab_history_saved_on_push():
         "_save_history is not callable on pipeline_dashboard module"
     assert callable(getattr(pipeline_dashboard, "_load_history", None)), \
         "_load_history is not callable on pipeline_dashboard module"
+
+
+def test_requirement_research_module_available():
+    from pipeline.requirement_research import build_requirement_research_context
+
+    text = build_requirement_research_context("Enable UPS customs value validation")
+    assert isinstance(text, str)
 
 
 # ---------------------------------------------------------------------------

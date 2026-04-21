@@ -11,8 +11,31 @@ from textwrap import dedent
 import config
 from langchain_anthropic import ChatAnthropic
 from langchain_core.messages import HumanMessage
+from pipeline.ticket_diagnoser import diagnose_ticket
 
 logger = logging.getLogger(__name__)
+
+# ── QA team — these are NOT developers ───────────────────────────────────────
+_QA_NAMES: set[str] = {
+    "anuja b",
+    "arshiya sayed",
+    "ashok kumar n",
+    "basavaraj",
+    "inderbir singh",
+    "keerthanaa elangovan",
+    "madan kumar as",
+    "preethi k k",
+    "shahitha s",
+}
+
+
+def is_qa_name(full_name: str) -> bool:
+    """Return True if the full name matches a known QA team member."""
+    name = (full_name or "").strip().lower()
+    return any(
+        name == qa or name.startswith(qa) or qa.startswith(name)
+        for qa in _QA_NAMES
+    )
 
 # ---------------------------------------------------------------------------
 # Prompts
@@ -75,7 +98,7 @@ def notify_devs_of_bug(
         for member in members:
             member_id = member.get("id", "")
             dev_name = member.get("fullName") or member.get("username") or "Developer"
-            if not member_id:
+            if not member_id or is_qa_name(dev_name):
                 continue
             message = BUG_DM_PROMPT.format(
                 dev_name=dev_name,
@@ -141,3 +164,19 @@ def ask_domain_expert(question: str, model: str | None = None) -> str:
     except Exception as exc:
         logger.error("ask_domain_expert Claude call failed: %s", exc)
         return f"Domain expert query failed: {exc}"
+
+
+def diagnose_customer_ticket(ticket_text: str, model: str | None = None) -> dict:
+    """Diagnose a customer issue or feature ticket using MCSL context."""
+    result = diagnose_ticket(ticket_text=ticket_text, model=model)
+    return {
+        "issue_type": result.issue_type,
+        "carrier_scope": result.carrier_scope,
+        "likely_root_cause": result.likely_root_cause,
+        "confidence": result.confidence,
+        "summary": result.summary,
+        "evidence": result.evidence,
+        "next_checks": result.next_checks,
+        "suggested_test_strategy": result.suggested_test_strategy,
+        "error": result.error,
+    }

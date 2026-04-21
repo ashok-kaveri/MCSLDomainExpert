@@ -141,7 +141,7 @@ def run_release_tests(
             *spec_files,
         ]
 
-        subprocess.run(
+        proc = subprocess.run(
             cmd,
             cwd=repo_path,
             env=env,
@@ -184,7 +184,7 @@ def run_release_tests(
         if total_duration == 0:
             total_duration = data.get("stats", {}).get("duration", 0)
 
-        return TestRunResult(
+        result = TestRunResult(
             specs=spec_results,
             total=len(spec_results),
             passed=passed,
@@ -193,6 +193,10 @@ def run_release_tests(
             duration_ms=total_duration,
             error="",
         )
+        if proc.returncode != 0 and not spec_results:
+            detail = (proc.stderr or proc.stdout or "").strip()
+            result.error = detail or f"Playwright exited with code {proc.returncode}"
+        return result
 
     except Exception as e:  # noqa: BLE001
         return TestRunResult(error=str(e))

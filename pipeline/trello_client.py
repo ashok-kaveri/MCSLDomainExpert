@@ -1,7 +1,7 @@
 """
 pipeline/trello_client.py — Trello REST API wrapper for MCSL QA Pipeline.
 
-Exports: TrelloClient, TrelloCard, TrelloList
+Exports: TrelloClient, TrelloCard, TrelloList, TrelloBoard
 """
 from __future__ import annotations
 
@@ -20,6 +20,12 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 @dataclass
+class TrelloBoard:
+    id: str
+    name: str
+
+
+@dataclass
 class TrelloList:
     id: str
     name: str
@@ -33,6 +39,7 @@ class TrelloCard:
     desc: str = ""
     url: str = ""
     list_id: str = ""
+    labels: list[str] = field(default_factory=list)
     member_ids: list[str] = field(default_factory=list)
     comments: list[str] = field(default_factory=list)
     attachments: list[dict] = field(default_factory=list)
@@ -57,10 +64,9 @@ class TrelloClient:
         self.api_key = api_key or os.getenv("TRELLO_API_KEY", "")
         self.token = token or os.getenv("TRELLO_TOKEN", "")
         self.board_id = board_id or os.getenv("TRELLO_BOARD_ID", "")
-        if not all([self.api_key, self.token, self.board_id]):
+        if not all([self.api_key, self.token]):
             raise ValueError(
-                "Trello credentials missing. Set TRELLO_API_KEY, TRELLO_TOKEN, "
-                "TRELLO_BOARD_ID in .env"
+                "Trello credentials missing. Set TRELLO_API_KEY and TRELLO_TOKEN in .env"
             )
 
     # ------------------------------------------------------------------
@@ -70,6 +76,11 @@ class TrelloClient:
     @property
     def _auth(self) -> dict:
         return {"key": self.api_key, "token": self.token}
+
+    def _require_board_id(self) -> str:
+        if not self.board_id:
+            raise ValueError("Trello board id missing. Select a board or set TRELLO_BOARD_ID in .env")
+        return self.board_id
 
     def _get(self, path: str, **params: Any) -> Any:
         r = requests.get(f"{self.BASE}/{path}", params={**self._auth, **params})
@@ -86,13 +97,23 @@ class TrelloClient:
         r.raise_for_status()
         return r.json()
 
+    def _post_files(self, path: str, files: dict[str, Any], **data: Any) -> Any:
+        r = requests.post(f"{self.BASE}/{path}", params={**self._auth, **data}, files=files)
+        r.raise_for_status()
+        return r.json()
+
     # ------------------------------------------------------------------
     # Board / list operations
     # ------------------------------------------------------------------
 
+    def get_boards(self) -> list[TrelloBoard]:
+        """Return boards visible to the authenticated Trello member."""
+        data = self._get("members/me/boards", fields="name")
+        return [TrelloBoard(id=b["id"], name=b.get("name", "")) for b in data]
+
     def get_lists(self) -> list[TrelloList]:
         """Return all lists on the configured board."""
-        data = self._get(f"boards/{self.board_id}/lists")
+        data = self._get(f"boards/{self._require_board_id()}/lists")
         return [TrelloList(id=l["id"], name=l["name"], pos=l.get("pos", 0.0)) for l in data]
 
     def get_list_by_name(self, name: str) -> TrelloList | None:
@@ -104,7 +125,7 @@ class TrelloClient:
 
     def create_list(self, name: str, pos: str = "bottom") -> TrelloList:
         """Create a new list on the configured board."""
-        data = self._post("lists", name=name, idBoard=self.board_id, pos=pos)
+        data = self._post("lists", name=name, idBoard=self._require_board_id(), pos=pos)
         return TrelloList(id=data["id"], name=data["name"], pos=data.get("pos", 0.0))
 
     # ------------------------------------------------------------------
@@ -113,7 +134,7 @@ class TrelloClient:
 
     def get_board_members(self) -> list[dict]:
         """Return list of {id, fullName, username} dicts for board members."""
-        data = self._get(f"boards/{self.board_id}/members")
+        data = self._get(f"boards/{self._require_board_id()}/members")
         return [{"id": m["id"], "fullName": m.get("fullName", ""), "username": m.get("username", "")} for m in data]
 
     # ------------------------------------------------------------------
@@ -130,7 +151,11 @@ class TrelloClient:
                 desc=c.get("desc", ""),
                 url=c.get("url", ""),
                 list_id=c.get("idList", list_id),
+                labels=[lb.get("name", "") for lb in c.get("labels", []) if lb.get("name")],
                 member_ids=c.get("idMembers", []),
+                comments=self.get_card_comments(c["id"]),
+                attachments=self.get_card_attachments(c["id"]),
+                checklists=self.get_card_checklists(c["id"]),
             )
             for c in data
         ]
@@ -141,6 +166,7 @@ class TrelloClient:
         name: str,
         desc: str = "",
         member_ids: list[str] | None = None,
+        label_names: list[str] | None = None,
         list_name: str = "",
     ) -> TrelloCard:
         """Create a card in the specified list and return a TrelloCard."""
@@ -150,7 +176,26 @@ class TrelloClient:
             name=name,
             desc=desc,
             idMembers=member_ids or [],
+            idLabels=[],
+            pos="top",
         )
+        if label_names:
+            try:
+                board_labels = self._get(
+                    f"boards/{self._require_board_id()}/labels",
+                    fields="name",
+                    limit=1000,
+                )
+                name_to_id = {
+                    (item.get("name") or "").strip(): item.get("id", "")
+                    for item in board_labels
+                    if item.get("id")
+                }
+                label_ids = [name_to_id[label] for label in label_names if name_to_id.get(label)]
+                if label_ids:
+                    data = self._put(f"cards/{data['id']}", idLabels=label_ids)
+            except Exception:
+                logger.warning("Failed to apply labels %s to card %s", label_names, data.get("id"))
         return TrelloCard(
             id=data["id"],
             name=data.get("name", name),
@@ -158,6 +203,7 @@ class TrelloClient:
             url=data.get("url", ""),
             list_id=data.get("idList", list_id),
             member_ids=data.get("idMembers", []),
+            labels=label_names or [],
         )
 
     def move_card_to_list(self, card_id: str, list_name: str) -> None:
@@ -195,6 +241,29 @@ class TrelloClient:
             if a.get("type") == "commentCard" and "data" in a and "text" in a["data"]
         ]
 
+    def get_card_attachments(self, card_id: str) -> list[dict]:
+        """Fetch attachments for a card as lightweight {name, url} dicts."""
+        data = self._get(f"cards/{card_id}/attachments")
+        return [
+            {"name": a.get("name", ""), "url": a.get("url", "")}
+            for a in (data if isinstance(data, list) else [])
+            if a.get("url")
+        ]
+
+    def get_card_checklists(self, card_id: str) -> list[dict]:
+        """Fetch card checklists in a lightweight UI-friendly structure."""
+        data = self._get(f"cards/{card_id}/checklists")
+        return [
+            {
+                "name": cl.get("name", ""),
+                "items": [
+                    {"name": item.get("name", ""), "state": item.get("state", "")}
+                    for item in cl.get("checkItems", [])
+                ],
+            }
+            for cl in (data if isinstance(data, list) else [])
+        ]
+
     def get_card_members(self, card_id: str) -> list[dict]:
         """Fetch members assigned to a card.
         Returns list of {id, fullName, username} dicts.
@@ -208,3 +277,20 @@ class TrelloClient:
             }
             for m in (data if isinstance(data, list) else [])
         ]
+
+    def attach_file(
+        self,
+        card_id: str,
+        filename: str,
+        file_bytes: bytes,
+        mime_type: str = "application/octet-stream",
+        attachment_name: str = "",
+    ) -> dict:
+        """Attach a file to a card using Trello multipart upload."""
+        files = {
+            "file": (filename, file_bytes, mime_type),
+        }
+        data = {}
+        if attachment_name:
+            data["name"] = attachment_name
+        return self._post_files(f"cards/{card_id}/attachments", files=files, **data)

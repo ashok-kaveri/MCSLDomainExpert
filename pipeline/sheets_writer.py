@@ -2,7 +2,7 @@
 pipeline/sheets_writer.py — Google Sheets writer for MCSL test case data.
 Phase 07 Plan 02 — RQA-04
 
-Exports: append_to_sheet, detect_tab, check_duplicates, TestCaseRow, DuplicateMatch, SHEET_TABS, TAB_KEYWORDS
+Exports: append_to_sheet, detect_tab, check_duplicates, create_new_tab, create_release_sheet, list_sheet_tabs, TestCaseRow, DuplicateMatch, SHEET_TABS, TAB_KEYWORDS
 
 NOTE: gspread is imported INSIDE append_to_sheet() and check_duplicates() — NOT at module top —
 so this module can be imported without gspread installed.
@@ -41,6 +41,18 @@ TAB_KEYWORDS = {
     "Settings & Config": ["setting", "config", "carrier account", "api key", "credential"],
     "Order Management": ["order", "fulfillment", "sync"],
 }
+
+
+def list_sheet_tabs() -> list[str]:
+    """Return live worksheet titles from the configured Google Sheet."""
+    import gspread
+    from google.oauth2.service_account import Credentials
+
+    scopes = ["https://www.googleapis.com/auth/spreadsheets"]
+    creds = Credentials.from_service_account_file(config.GOOGLE_CREDENTIALS_PATH, scopes=scopes)
+    gc = gspread.authorize(creds)
+    sh = gc.open_by_key(config.GOOGLE_SHEETS_ID)
+    return [ws.title for ws in sh.worksheets()]
 
 
 # ---------------------------------------------------------------------------
@@ -92,13 +104,13 @@ def parse_test_cases_to_rows(
     positive_only: bool = False,
 ) -> list[TestCaseRow]:
     rows = []
-    tc_blocks = re.split(r"(?=^## TC-\d+)", test_cases_markdown, flags=re.MULTILINE)
+    tc_blocks = re.split(r"(?=^#{2,3}\s+TC-\d+)", test_cases_markdown, flags=re.MULTILINE)
     si = 1
     for block in tc_blocks:
         block = block.strip()
-        if not block or not block.startswith("## TC-"):
+        if not block or not re.match(r"^#{2,3}\s+TC-\d+", block):
             continue
-        title_match = re.match(r"## TC-\d+[:\s]+(.+)", block)
+        title_match = re.match(r"^#{2,3}\s+TC-\d+[:\s]+(.+)", block)
         scenario = title_match.group(1).strip() if title_match else card_name
         tc_type = "Positive"
         priority = "Medium"
@@ -108,17 +120,24 @@ def parse_test_cases_to_rows(
         priority_match = re.search(r"\*\*Priority:\*\*\s*(.+)", block)
         if priority_match:
             priority = priority_match.group(1).strip()
-        if positive_only and "negative" in tc_type.lower():
+        if positive_only and "positive" not in tc_type.lower():
             continue
+        preconditions_match = re.search(r"\*\*Preconditions?:\*\*\s*(.+?)(?:\n|$)", block, re.IGNORECASE)
+        comments = preconditions_match.group(1).strip() if preconditions_match else ""
         gwt_parts = []
-        for keyword in ("Given", "When", "Then"):
-            m = re.search(
-                rf"{keyword}\s+(.+?)(?=\n(?:Given|When|Then|##)|$)",
-                block,
-                re.DOTALL | re.IGNORECASE,
-            )
-            if m:
-                gwt_parts.append(f"{keyword} {m.group(1).strip()}")
+        in_steps = False
+        for line in block.splitlines():
+            stripped = line.strip()
+            if re.match(r"\*\*Steps:\*\*", stripped, re.IGNORECASE):
+                in_steps = True
+                continue
+            if in_steps and re.match(r"\*\*.+\*\*", stripped) and not re.match(
+                r"^(Given|When|And|Then|But)\b", stripped, re.IGNORECASE
+            ):
+                break
+            if re.match(r"^(Given|When|And|Then|But)\b", stripped, re.IGNORECASE):
+                gwt_parts.append(stripped)
+                in_steps = True
         description = "\n".join(gwt_parts) if gwt_parts else block[:200]
         rows.append(
             TestCaseRow(
@@ -126,6 +145,7 @@ def parse_test_cases_to_rows(
                 epic=epic or card_name,
                 scenario=scenario,
                 description=description,
+                comments=comments,
                 priority=priority,
             )
         )
@@ -181,6 +201,159 @@ def check_duplicates(
 
 
 # ---------------------------------------------------------------------------
+# create_new_tab
+# ---------------------------------------------------------------------------
+
+def create_new_tab(tab_name: str) -> dict:
+    """Create a new worksheet tab if it does not already exist."""
+    import gspread
+    from google.oauth2.service_account import Credentials
+
+    clean_name = (tab_name or "").strip()
+    if not clean_name:
+        raise ValueError("Tab name cannot be empty.")
+
+    scopes = ["https://www.googleapis.com/auth/spreadsheets"]
+    creds = Credentials.from_service_account_file(config.GOOGLE_CREDENTIALS_PATH, scopes=scopes)
+    gc = gspread.authorize(creds)
+    sh = gc.open_by_key(config.GOOGLE_SHEETS_ID)
+
+    existing_titles = [ws.title for ws in sh.worksheets()]
+    for title in existing_titles:
+        if title.lower() == clean_name.lower():
+            return {
+                "ok": True,
+                "created": False,
+                "tab": title,
+                "sheet_url": f"https://docs.google.com/spreadsheets/d/{config.GOOGLE_SHEETS_ID}",
+                "reason": "already_exists",
+                "error": "",
+            }
+
+    ws = sh.add_worksheet(title=clean_name[:100], rows=200, cols=9)
+    ws.append_row([
+        "SI No",
+        "Epic",
+        "Scenario",
+        "Description",
+        "Comments",
+        "Priority",
+        "Details",
+        "Pass/Fail",
+        "Release",
+    ])
+    return {
+        "ok": True,
+        "created": True,
+        "tab": ws.title,
+        "sheet_url": f"https://docs.google.com/spreadsheets/d/{config.GOOGLE_SHEETS_ID}",
+        "reason": "",
+        "error": "",
+    }
+
+
+RELEASE_SHEET_HEADERS = [
+    "Card Name",
+    "Ticket",
+    "Toggle /other info",
+    "Card URL",
+    "Card Description",
+    "API",
+    "List Name",
+]
+
+_JIRA_RE = re.compile(r"\b([A-Z]{2,10}-\d+)\b")
+_REST_RE = re.compile(r"\b(rest api|restful|rest)\b", re.IGNORECASE)
+_SOAP_RE = re.compile(r"\bsoap\b", re.IGNORECASE)
+
+
+def _extract_ticket(desc: str, labels: list[str]) -> str:
+    combined = " ".join(labels or []) + " " + (desc or "")
+    m = _JIRA_RE.search(combined)
+    return m.group(1) if m else "NO ticket attached"
+
+
+def _extract_toggle_info(desc: str, labels: list[str]) -> str:
+    combined = (" ".join(labels or []) + " " + (desc or "")).lower()
+    return "Toggle available" if "toggle" in combined else ""
+
+
+def _extract_api_type(desc: str, labels: list[str]) -> str:
+    combined = " ".join(labels or []) + " " + (desc or "")
+    if _REST_RE.search(combined):
+        return "REST"
+    if _SOAP_RE.search(combined):
+        return "SOAP"
+    return "N/A"
+
+
+def create_release_sheet(
+    release_name: str,
+    cards: list,
+    list_name: str = "",
+    bugs_by_card: dict | None = None,
+) -> dict:
+    import gspread
+    from google.oauth2.service_account import Credentials
+
+    bugs_by_card = bugs_by_card or {}
+    tab_name = re.sub(r"[\\/*?\[\]:]", "-", (release_name or "").strip())[:100]
+    if not tab_name:
+        raise ValueError("Release name cannot be empty.")
+
+    scopes = ["https://www.googleapis.com/auth/spreadsheets"]
+    creds = Credentials.from_service_account_file(config.GOOGLE_CREDENTIALS_PATH, scopes=scopes)
+    gc = gspread.authorize(creds)
+    sh = gc.open_by_key(config.GOOGLE_SHEETS_ID)
+
+    existing_titles = [ws.title for ws in sh.worksheets()]
+    created = tab_name not in existing_titles
+    if created:
+        ws = sh.add_worksheet(title=tab_name, rows=max(len(cards) + 10, 50), cols=len(RELEASE_SHEET_HEADERS))
+    else:
+        ws = sh.worksheet(tab_name)
+        ws.clear()
+
+    ws.append_row(RELEASE_SHEET_HEADERS, value_input_option="USER_ENTERED")
+    try:
+        sh.batch_update({"requests": [{"repeatCell": {
+            "range": {"sheetId": ws.id, "startRowIndex": 0, "endRowIndex": 1, "startColumnIndex": 0, "endColumnIndex": len(RELEASE_SHEET_HEADERS)},
+            "cell": {"userEnteredFormat": {"textFormat": {"bold": True}, "backgroundColor": {"red": 0.27, "green": 0.51, "blue": 0.71}}},
+            "fields": "userEnteredFormat(textFormat,backgroundColor)"
+        }}]})
+    except Exception:
+        pass
+
+    rows_to_write = []
+    for card in cards:
+        desc = getattr(card, "desc", "") or ""
+        labels = getattr(card, "labels", []) or []
+        bugs = bugs_by_card.get(getattr(card, "id", ""), [])
+        if bugs:
+            ticket_cell = "\n".join(f"{b.get('severity', 'Bug')} - {b.get('name', '')}" for b in bugs if b.get("name"))
+        else:
+            ticket_cell = _extract_ticket(desc, labels)
+        rows_to_write.append([
+            getattr(card, "name", ""),
+            ticket_cell or "NO ticket attached",
+            _extract_toggle_info(desc, labels),
+            getattr(card, "url", "") or "",
+            desc,
+            _extract_api_type(desc, labels),
+            list_name or getattr(card, "list_name", ""),
+        ])
+    if rows_to_write:
+        ws.append_rows(rows_to_write, value_input_option="USER_ENTERED")
+
+    return {
+        "tab": tab_name,
+        "rows_added": len(rows_to_write),
+        "sheet_url": f"https://docs.google.com/spreadsheets/d/{config.GOOGLE_SHEETS_ID}/edit#gid={ws.id}",
+        "created": created,
+    }
+
+
+# ---------------------------------------------------------------------------
 # append_to_sheet
 # ---------------------------------------------------------------------------
 
@@ -200,7 +373,7 @@ def append_to_sheet(
     from google.oauth2.service_account import Credentials
 
     target_tab = tab_name or detect_tab(card_name, test_cases_markdown)
-    rows = parse_test_cases_to_rows(card_name, test_cases_markdown, epic=epic, positive_only=False)
+    rows = parse_test_cases_to_rows(card_name, test_cases_markdown, epic=epic, positive_only=True)
     if not rows:
         return {"tab": target_tab, "rows_added": 0, "sheet_url": "", "release": release, "duplicates": []}
 

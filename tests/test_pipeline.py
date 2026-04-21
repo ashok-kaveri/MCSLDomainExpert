@@ -6,6 +6,9 @@ from __future__ import annotations
 
 import json
 import os
+from pathlib import Path
+import sys
+import types
 from unittest.mock import MagicMock, patch, call
 
 import pytest
@@ -95,9 +98,38 @@ def test_us02_refine_prompt_contains_both():
         refine_user_story("PREVIOUS_CONTENT", "CHANGE_REQUEST_TEXT")
 
     # The prompt content should include both strings
-    all_content = " ".join(str(m) for m in captured_messages)
+    all_content = " ".join(getattr(m, "content", str(m)) for m in captured_messages)
     assert "PREVIOUS_CONTENT" in all_content
     assert "CHANGE_REQUEST_TEXT" in all_content
+
+
+def test_requirement_research_gracefully_degrades_without_rag():
+    """Requirement research should still return context when RAG backends are unavailable."""
+    fake_vectorstore = types.SimpleNamespace(search=MagicMock(side_effect=Exception("vector db unavailable")))
+    fake_code_indexer = types.SimpleNamespace(search_code=MagicMock(side_effect=Exception("code index unavailable")))
+
+    with patch("pipeline.requirement_research.carrier_research_context", return_value="Carrier context"), \
+         patch("pipeline.requirement_research.load_runtime_locator_memory_context", return_value=["locator A"]), \
+         patch.dict(sys.modules, {"rag.vectorstore": fake_vectorstore, "rag.code_indexer": fake_code_indexer}):
+        from pipeline.requirement_research import build_requirement_research_context
+
+        result = build_requirement_research_context("Enable UPS customs value validation")
+
+    assert "Requirement research for User Story / AC" in result
+    assert "Carrier context" in result
+    assert "Relevant proven UI/navigation hints" in result
+    assert "Official carrier/platform findings from local RAG" in result
+
+
+def test_dashboard_ac_generation_path_keeps_research_and_timestamp_hooks():
+    """The AC generation branch should import research context and record timestamps."""
+    src = Path("pipeline_dashboard.py").read_text(encoding="utf-8")
+
+    assert "from datetime import datetime" in src
+    assert 'if st.button("🤖 Generate User Story & AC"' in src
+    assert "from pipeline.requirement_research import build_requirement_research_context" in src
+    assert "_research = build_requirement_research_context(_raw)" in src
+    assert "ac_generated_at=datetime.now().isoformat(timespec=\"seconds\")" in src
 
 
 # ---------------------------------------------------------------------------
@@ -354,17 +386,17 @@ def test_rqa01_validate_card_returns_report():
     fake_response = MagicMock()
     fake_response.content = fake_json_str
 
-    with patch("pipeline.domain_validator.ChatAnthropic") as mock_cls, \
-         patch("rag.vectorstore.search", return_value=[]), \
+    import pipeline.domain_validator as dv
+
+    with patch.object(dv, "_make_llm") as mock_llm_factory, \
          patch.object(config, "ANTHROPIC_API_KEY", "test-key"):
         mock_llm = MagicMock()
         mock_llm.invoke.return_value = fake_response
-        mock_cls.return_value = mock_llm
+        mock_llm_factory.return_value = mock_llm
 
-        from pipeline.domain_validator import validate_card, ValidationReport
-        result = validate_card("Add FedEx signature", "User wants signature on delivery")
+        result = dv.validate_card("Add FedEx signature", "User wants signature on delivery")
 
-    assert isinstance(result, ValidationReport)
+    assert isinstance(result, dv.ValidationReport)
     assert result.overall_status in {"PASS", "NEEDS_REVIEW", "FAIL"}
     assert result.error == ""
 
@@ -392,17 +424,36 @@ def test_rqa01_validate_card_rag_failure():
     fake_response = MagicMock()
     fake_response.content = fake_json_str
 
-    with patch("pipeline.domain_validator.ChatAnthropic") as mock_cls, \
-         patch("rag.vectorstore.search", side_effect=Exception("Chroma not available")), \
+    import pipeline.domain_validator as dv
+
+    with patch.object(dv, "_make_llm") as mock_llm_factory, \
          patch.object(config, "ANTHROPIC_API_KEY", "test-key"):
         mock_llm = MagicMock()
         mock_llm.invoke.return_value = fake_response
-        mock_cls.return_value = mock_llm
+        mock_llm_factory.return_value = mock_llm
 
-        from pipeline.domain_validator import validate_card, ValidationReport
-        result = validate_card("Some card", "Some desc")
+        result = dv.validate_card("Some card", "Some desc")
 
-    assert isinstance(result, ValidationReport)
+    assert isinstance(result, dv.ValidationReport)
+
+
+def test_rqa01_validate_card_malformed_json_uses_fallback_message():
+    """Malformed validator JSON should fall back cleanly without leaking parser details."""
+    import config
+    import pipeline.domain_validator as dv
+
+    broken_response = MagicMock()
+    broken_response.content = '{"overall_status":"NEEDS_REVIEW","summary":"Bad JSON"'
+
+    mock_llm = MagicMock()
+    mock_llm.invoke.side_effect = [broken_response, broken_response, broken_response]
+
+    with patch.object(dv, "_make_llm", return_value=mock_llm), \
+         patch.object(config, "ANTHROPIC_API_KEY", "test-key"):
+        result = dv.validate_card("Customs floor", "Add minimum customs value floor")
+
+    assert isinstance(result, dv.ValidationReport)
+    assert result.error == "Validator returned malformed JSON; fallback validation was used."
 
 
 # ---------------------------------------------------------------------------
@@ -435,18 +486,157 @@ def test_rqa02_generate_tc_prompt_contains_card():
         captured_messages.extend(messages)
         return fake_response
 
-    with patch("pipeline.card_processor.ChatAnthropic") as mock_cls:
+    import pipeline.card_processor as cp
+
+    with patch.object(cp, "_make_llm") as mock_llm_factory:
         mock_llm = MagicMock()
         mock_llm.invoke.side_effect = fake_invoke
-        mock_cls.return_value = mock_llm
+        mock_llm_factory.return_value = mock_llm
 
         from pipeline.trello_client import TrelloCard
-        from pipeline.card_processor import generate_test_cases
         card = TrelloCard(id="c1", name="FedEx Signature Feature", desc="Add signature option")
-        generate_test_cases(card)
+        cp.generate_test_cases(card)
 
-    all_content = " ".join(str(m) for m in captured_messages)
+    all_content = " ".join(getattr(m, "content", str(m)) for m in captured_messages)
     assert "FedEx Signature Feature" in all_content
+
+
+def test_rqa02_generate_tc_prompt_includes_structured_context_sections():
+    """generate_test_cases() keeps the FedEx-style structured context sections in the prompt."""
+    captured_messages = []
+    fake_response = MagicMock()
+    fake_response.content = "### TC-1: Signature\n**Type:** Positive\n**Priority:** High\n**Preconditions:** Carrier configured\n**Steps:**\nGiven setup exists\nWhen label is generated\nThen signature option appears"
+
+    def fake_invoke(messages):
+        captured_messages.extend(messages)
+        return fake_response
+
+    import pipeline.card_processor as cp
+
+    with patch.object(cp, "_make_llm") as mock_llm_factory:
+        mock_llm = MagicMock()
+        mock_llm.invoke.side_effect = fake_invoke
+        mock_llm_factory.return_value = mock_llm
+
+        from pipeline.trello_client import TrelloCard
+
+        card = TrelloCard(
+            id="c2",
+            name="Toggle-driven customs floor",
+            desc="Validate customs floor behavior",
+            comments=["toggle: minimum customs value floor", "Dev note: verify checkout and label flow"],
+        )
+        cp.generate_test_cases(card)
+
+    all_content = " ".join(getattr(m, "content", str(m)) for m in captured_messages)
+    assert "Developer / QA comments from Trello" in all_content
+    assert "Similar past test cases from the QA knowledge base" in all_content or "Feature Card:" in all_content
+    assert "Relevant automation / code context" in all_content or "Feature Card:" in all_content
+
+
+def test_slack_toggle_detection_handles_store_enablement_and_unquoted_shopify_keys():
+    """Toggle detection should recognize common Trello comment forms used by devs."""
+    from pipeline.slack_client import detect_toggles
+
+    toggles = detect_toggles(
+        "Enhancement for customs floor",
+        "Minimum customs value floor",
+        "\n".join([
+            "Please enable minimum customs value floor on the store before QA.",
+            "feature name: customs floor rollout",
+            "shopify.feature.minimum.customs.value.floor.enabled",
+        ]),
+    )
+
+    lowered = {item.lower() for item in toggles}
+    assert any("minimum customs value floor" in item for item in lowered)
+    assert any("customs floor rollout" in item for item in lowered)
+
+
+def test_slack_toggle_detection_handles_generic_config_key_comment():
+    """Toggle detection should catch copied config keys from Trello comments."""
+    from pipeline.slack_client import detect_toggle_details, detect_toggles
+
+    toggles = detect_toggles(
+        "",
+        "Enhancement: minimum customs value floor",
+        '\n'.join([
+            "related toggle to enable country wise customs value:",
+            '"accountUUID.country.wise.customs.value.enabled": true,',
+        ]),
+    )
+
+    lowered = {item.lower() for item in toggles}
+    assert any("country wise customs value" in item for item in lowered)
+    details = detect_toggle_details(
+        "",
+        "Enhancement: minimum customs value floor",
+        '\n'.join([
+            "related toggle to enable country wise customs value:",
+            '"accountUUID.country.wise.customs.value.enabled": true,',
+        ]),
+    )
+    assert any(item.get("key_template") == "accountUUID.country.wise.customs.value.enabled" for item in details)
+
+
+def test_slack_toggle_detection_reads_description_and_comment_fallback_shapes():
+    """Toggle detection should work across Trello description and comments."""
+    from pipeline.slack_client import detect_toggles
+
+    toggles = detect_toggles(
+        "\n".join([
+            "Prerequisite for QA:",
+            "Toggle key:",
+            "accountUUID.multi.package.hazmat.enabled",
+        ]),
+        "Hazmat package update",
+        "\n".join([
+            "Please enable checkout carrier restrictions for the store before QA.",
+            "feature flag is customs floor rollout",
+        ]),
+    )
+
+    lowered = {item.lower() for item in toggles}
+    assert any("multi package hazmat" in item for item in lowered)
+    assert any("checkout carrier restrictions" in item for item in lowered)
+    assert any("customs floor rollout" in item for item in lowered)
+
+
+def test_slack_toggle_detection_ignores_toggle_explanatory_prose():
+    """Toggle detection should not treat explanatory ON/OFF prose as toggle names."""
+    from pipeline.slack_client import detect_toggles
+
+    toggles = detect_toggles(
+        "",
+        "Minimum customs value floor",
+        "\n".join([
+            "Toggle: minimum customs value floor",
+            "Toggle OFF disables the post-conversion floor, toggle ON enables the post-conversion floor, in its default enabled state.",
+        ]),
+    )
+
+    lowered = {item.lower() for item in toggles}
+    assert "minimum customs value floor" in lowered
+    assert not any("post-conversion floor" in item for item in lowered)
+    assert "prerequisite" not in lowered
+
+
+def test_slack_toggle_formatting_keeps_raw_config_key_in_message():
+    """Toggle Slack text should keep the raw config key and rely on separate UUID fields."""
+    from pipeline.slack_client import _format_toggle_lines
+
+    lines = _format_toggle_lines(
+        [
+            {
+                "label": "country wise customs value",
+                "key_template": "accountUUID.country.wise.customs.value.enabled",
+            }
+        ],
+        account_uuid="acc-123",
+    )
+
+    assert "country wise customs value" in lines
+    assert '"accountUUID.country.wise.customs.value.enabled": true' in lines
 
 
 # ---------------------------------------------------------------------------
@@ -579,6 +769,47 @@ def test_slack01_list_channels():
     assert isinstance(channels, list)
     assert len(channels) >= 1
     assert channels[0]["id"] == "C001"
+
+
+def test_slack01_list_channels_uses_bearer_auth_header():
+    """Channel listing should use bearer auth headers instead of token query params."""
+    get_resp = MagicMock()
+    get_resp.json.return_value = {
+        "ok": True,
+        "channels": [{"id": "C001", "name": "qa-team"}],
+        "response_metadata": {"next_cursor": ""},
+    }
+    get_resp.raise_for_status = MagicMock()
+
+    with patch("requests.get", return_value=get_resp) as mock_get:
+        from pipeline.slack_client import SlackClient
+
+        SlackClient(token="xoxb-test").list_channels()
+
+    assert mock_get.call_args.kwargs["headers"]["Authorization"] == "Bearer xoxb-test"
+    assert "token" not in mock_get.call_args.kwargs["params"]
+
+
+def test_slack01_search_users_uses_bearer_auth_header():
+    """User search should use bearer auth headers instead of token query params."""
+    get_resp = MagicMock()
+    get_resp.json.return_value = {
+        "ok": True,
+        "members": [
+            {"id": "U001", "name": "madan", "profile": {"real_name": "Madan", "display_name": "madan"}},
+        ],
+        "response_metadata": {"next_cursor": ""},
+    }
+    get_resp.raise_for_status = MagicMock()
+
+    with patch("requests.get", return_value=get_resp) as mock_get:
+        from pipeline.slack_client import SlackClient
+
+        results = SlackClient(token="xoxb-test").search_users("madan")
+
+    assert results[0]["id"] == "U001"
+    assert mock_get.call_args.kwargs["headers"]["Authorization"] == "Bearer xoxb-test"
+    assert "token" not in mock_get.call_args.kwargs["params"]
 
 
 # ---------------------------------------------------------------------------
@@ -805,3 +1036,172 @@ def test_auto03_git_error():
 
     assert result[0] is False, f"Expected success=False, got {result}"
     assert "remote rejected" in result[1], f"Expected 'remote rejected' in error msg, got {result[1]}"
+
+
+def test_auto04_find_pom_matches_existing_mcsl_files(tmp_path):
+    repo = tmp_path / "mcsl-auto"
+    (repo / "support/pages/orders").mkdir(parents=True)
+    (repo / "tests/orderSummary").mkdir(parents=True)
+    (repo / "support/pages/orders/orderSummaryPage.ts").write_text("class OrderSummary {}", encoding="utf-8")
+    (repo / "tests/orderSummary/documentAutoUploadForFedex.spec.ts").write_text("test()", encoding="utf-8")
+
+    import pipeline.automation_writer as aw_mod
+
+    with patch.object(aw_mod.config, "MCSL_AUTOMATION_REPO_PATH", str(repo)):
+        match = aw_mod.find_pom("Order Summary label verification", "Generate label from order summary")
+
+    assert match is not None
+    assert match["file"] == "support/pages/orders/orderSummaryPage.ts"
+    assert match["spec_file"] == "tests/orderSummary/documentAutoUploadForFedex.spec.ts"
+    assert match["app_path"] == "orders"
+
+
+def test_auto05_write_automation_updates_existing_mcsl_files(tmp_path):
+    repo = tmp_path / "mcsl-auto"
+    (repo / "support/pages/orders").mkdir(parents=True)
+    (repo / "tests/orderSummary").mkdir(parents=True)
+    (repo / "support/pages/orders/orderSummaryPage.ts").write_text("class OrderSummary {}", encoding="utf-8")
+    (repo / "tests/orderSummary/documentAutoUploadForFedex.spec.ts").write_text("test()", encoding="utf-8")
+
+    fake_llm_response = MagicMock()
+    fake_llm_response.content = (
+        "=== POM FILE: support/pages/orders/orderSummaryPage.ts ===\n"
+        "import BasePage from '@pages/basePage';\n"
+        "class OrderSummary extends BasePage {}\n"
+        "export default OrderSummary;\n"
+        "=== SPEC FILE: tests/orderSummary/documentAutoUploadForFedex.spec.ts ===\n"
+        "import { test, expect } from '@setup/fixtures';\n"
+        "test.describe.configure({ mode: \"serial\" });\n"
+        "test.describe('Order Summary', () => {});\n"
+    )
+    mock_llm = MagicMock()
+    mock_llm.invoke.return_value = fake_llm_response
+
+    import pipeline.automation_writer as aw_mod
+
+    with patch.object(aw_mod.config, "MCSL_AUTOMATION_REPO_PATH", str(repo)), \
+         patch("pipeline.automation_writer.ChatAnthropic", return_value=mock_llm):
+        result = aw_mod.write_automation(
+            "Order Summary label verification",
+            "- TC1: Verify label generates",
+            acceptance_criteria="Generate label from order summary",
+        )
+
+    assert result.kind == "existing_pom"
+    assert result.pom_path == "support/pages/orders/orderSummaryPage.ts"
+    assert result.spec_path == "tests/orderSummary/documentAutoUploadForFedex.spec.ts"
+    assert "Matched existing automation" in result.detection_reason
+
+
+def test_auto06_feature_detector_falls_back_to_existing_match():
+    fake_doc = types.SimpleNamespace(
+        page_content="Order summary automation chunk",
+        metadata={"file_path": "tests/orderSummary/documentAutoUploadForFedex.spec.ts"},
+    )
+
+    with patch("pipeline.feature_detector.search_code", return_value=[fake_doc]), \
+         patch("pipeline.feature_detector.find_pom", return_value={
+             "file": "support/pages/orders/orderSummaryPage.ts",
+             "spec_file": "tests/orderSummary/documentAutoUploadForFedex.spec.ts",
+             "app_path": "orders",
+         }), \
+         patch("pipeline.feature_detector.config") as mock_cfg:
+        mock_cfg.ANTHROPIC_API_KEY = ""
+        mock_cfg.CLAUDE_SONNET_MODEL = "claude-sonnet"
+        result = __import__("pipeline.feature_detector", fromlist=["detect_feature"]).detect_feature(
+            "Order Summary label verification",
+            "Generate label from order summary",
+        )
+
+    assert result.kind == "existing"
+    assert "tests/orderSummary/documentAutoUploadForFedex.spec.ts" in result.related_files
+
+
+def test_auto07_post_results_formats_and_posts_to_slack():
+    from pipeline.test_runner import SpecResult, TestRunResult
+    from pipeline.slack_client import post_results
+
+    run_result = TestRunResult(
+        specs=[
+            SpecResult(file="tests/a.spec.ts", title="passes", status="passed", duration_ms=100),
+            SpecResult(file="tests/b.spec.ts", title="fails", status="failed", duration_ms=120),
+        ],
+        total=2,
+        passed=1,
+        failed=1,
+        skipped=0,
+        duration_ms=220,
+    )
+
+    mock_client = MagicMock()
+    mock_client.post_to_channel.return_value = {"ok": True, "ts": "123.456"}
+
+    with patch("pipeline.slack_client._make_client", return_value=mock_client):
+        result = post_results(run_result, "MCSLapp 1.2.3")
+
+    assert result["ok"] is True
+    assert result["ts"] == "123.456"
+    payload = mock_client.post_to_channel.call_args[0][0]
+    assert "MCSL Automation — MCSLapp 1.2.3" in payload
+    assert "Failed:" in payload
+
+
+def test_dashboard_tc_warning_skips_fallback_validation_errors():
+    """TC warning should not trigger for fallback validation reports with an error message."""
+    src = Path("pipeline_dashboard.py").read_text(encoding="utf-8")
+
+    assert 'not getattr(_vr, "error", "") and getattr(_vr, "overall_status", "") == "FAIL"' in src
+
+
+def test_sheets_writer_lists_live_tabs_from_configured_sheet():
+    """Sheet tab list should come from live worksheet titles, not only the static constant."""
+    import sys
+    import types
+
+    fake_ws1 = types.SimpleNamespace(title="MCSL Master")
+    fake_ws2 = types.SimpleNamespace(title="Shipping Labels")
+    fake_sheet = types.SimpleNamespace(worksheets=lambda: [fake_ws1, fake_ws2])
+    fake_gc = types.SimpleNamespace(open_by_key=lambda key: fake_sheet)
+    fake_gspread = types.SimpleNamespace(authorize=lambda creds: fake_gc)
+    fake_creds = types.SimpleNamespace(from_service_account_file=lambda *args, **kwargs: object())
+    fake_service_account = types.SimpleNamespace(Credentials=fake_creds)
+
+    with patch.dict(
+        sys.modules,
+        {
+            "gspread": fake_gspread,
+            "google": types.SimpleNamespace(),
+            "google.oauth2": types.SimpleNamespace(),
+            "google.oauth2.service_account": fake_service_account,
+        },
+    ):
+        from pipeline.sheets_writer import list_sheet_tabs
+
+        tabs = list_sheet_tabs()
+
+    assert tabs == ["MCSL Master", "Shipping Labels"]
+
+
+def test_dashboard_uses_live_sheet_tab_options_helper():
+    """Dashboard publish selectors should use the live sheet tab helper."""
+    src = Path("pipeline_dashboard.py").read_text(encoding="utf-8")
+
+    assert "_live_publish_tabs = _sheet_tab_options()" in src
+    assert "_live_approval_tabs = _sheet_tab_options()" in src
+
+
+def test_dashboard_ai_qa_bug_review_has_fedex_style_controls():
+    """AI QA Verifier bug review should expose explicit review wording and bulk-select controls."""
+    src = Path("pipeline_dashboard.py").read_text(encoding="utf-8")
+
+    assert '<div class="step-chip">🐛 Bug Review</div>' in src
+    assert "☑ Select All" in src
+    assert "☐ None" in src
+    assert "📨 Notify Assigned Devs (" in src
+
+
+def test_validate_ac_load_cards_also_populates_diagnosis():
+    """Validate AC load flow should create diagnosis state so extra diagnosis step is not needed."""
+    src = Path("pipeline_dashboard.py").read_text(encoding="utf-8")
+
+    assert 'st.session_state[f"diagnosis_{_card.id}"] = diagnose_customer_ticket(' in src

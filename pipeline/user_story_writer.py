@@ -10,6 +10,7 @@ import logging
 import config
 from langchain_anthropic import ChatAnthropic
 from langchain_core.messages import HumanMessage
+from pipeline.carrier_knowledge import carrier_prompt_block, carrier_research_context
 
 logger = logging.getLogger(__name__)
 
@@ -31,6 +32,13 @@ Domain context (MCSL knowledge base):
 
 Codebase context (relevant MCSL code):
 {code_context}
+
+Carrier scope guidance:
+{carrier_scope}
+
+Important interpretation rule:
+- If the request clearly names a carrier, write carrier-specific criteria.
+- If no carrier is named, treat it as a generic MCSL platform feature and avoid inventing carrier-only constraints.
 
 Write a User Story and Acceptance Criteria in this format:
 ### User Story
@@ -102,7 +110,11 @@ def _fetch_code_context(query: str) -> str:
 # Public API
 # ---------------------------------------------------------------------------
 
-def generate_user_story(feature_request: str, model: str | None = None) -> str:
+def generate_user_story(
+    feature_request: str,
+    model: str | None = None,
+    research_context: str | None = None,
+) -> str:
     """Generate a User Story + Acceptance Criteria for the given feature request.
 
     Uses MCSL domain knowledge and codebase context when available.
@@ -116,11 +128,14 @@ def generate_user_story(feature_request: str, model: str | None = None) -> str:
         Markdown string containing User Story, Acceptance Criteria, and Notes sections.
     """
     domain_context = _fetch_domain_context(feature_request)
+    if research_context:
+        domain_context = f"{research_context}\n\n---\n\n{domain_context}" if domain_context else research_context
     code_context = _fetch_code_context(feature_request)
     prompt = US_WRITER_PROMPT.format(
         feature_request=feature_request,
         domain_context=domain_context,
         code_context=code_context,
+        carrier_scope=carrier_prompt_block(feature_request),
     )
     response = _get_claude(model).invoke([HumanMessage(content=prompt)])
     return response.content.strip()

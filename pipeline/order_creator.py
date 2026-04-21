@@ -19,21 +19,12 @@ import requests
 from dotenv import dotenv_values
 
 import config
+from pipeline.carrier_knowledge import get_carrier_env_path
 
 logger = logging.getLogger(__name__)
 
 # Default carrier-env path (falls back to UPS env if no carrier specified)
 _CARRIER_ENV_DIR = Path(config.MCSL_AUTOMATION_REPO_PATH) / "carrier-envs"
-
-# Carrier code → env file mapping
-CARRIER_ENV_MAP = {
-    "C2":  "packaging-fedexrest.env",   # FedEx
-    "C3":  "ups.env",                    # UPS
-    "C1":  "dhl.env",                    # DHL (adjust filename to actual)
-    "C22": "usps-ship.env",              # USPS/EasyPost
-    "C4":  "canada-post.env",            # Canada Post (adjust to actual)
-}
-
 
 def _read_carrier_env(carrier_env_path: str | Path) -> dict[str, str]:
     """Read a carrier-env file and return its key-value pairs."""
@@ -45,18 +36,7 @@ def _read_carrier_env(carrier_env_path: str | Path) -> dict[str, str]:
 
 def _get_carrier_env_path(carrier_code: str) -> Path:
     """Return the carrier-env file path for a given carrier code."""
-    filename = CARRIER_ENV_MAP.get(carrier_code)
-    if not filename:
-        raise ValueError(f"Unknown carrier code: {carrier_code}. Available: {list(CARRIER_ENV_MAP)}")
-    path = _CARRIER_ENV_DIR / filename
-    # Fall back to any .env file in carrier-envs/ containing the carrier code
-    if not path.exists():
-        for env_file in _CARRIER_ENV_DIR.glob("*.env"):
-            env_data = dotenv_values(str(env_file))
-            if env_data.get("CARRIER") == carrier_code:
-                return env_file
-        raise FileNotFoundError(f"No carrier-env file found for carrier code {carrier_code}")
-    return path
+    return get_carrier_env_path(carrier_code)
 
 
 def _default_address() -> dict[str, Any]:

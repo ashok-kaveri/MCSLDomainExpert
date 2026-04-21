@@ -121,3 +121,26 @@ def test_run01_run_release_tests_calls_subprocess():
     assert "playwright" in cmd
     assert "test" in cmd
     assert "--reporter=json" in cmd
+
+
+def test_run01_run_release_tests_surfaces_process_error_without_results():
+    """Non-zero playwright exit with no parsed results should return an error string."""
+    mock_proc = MagicMock()
+    mock_proc.returncode = 1
+    mock_proc.stderr = "playwright config error"
+    mock_proc.stdout = ""
+
+    with patch("subprocess.run", return_value=mock_proc), \
+         patch("tempfile.NamedTemporaryFile") as mock_tmp, \
+         patch("pathlib.Path.read_text", return_value="{}"), \
+         patch("pathlib.Path.exists", return_value=True), \
+         patch("os.unlink"):
+        mock_tmp_file = MagicMock()
+        mock_tmp_file.__enter__ = MagicMock(return_value=mock_tmp_file)
+        mock_tmp_file.__exit__ = MagicMock(return_value=False)
+        mock_tmp_file.name = "/tmp/fake_output.json"
+        mock_tmp.return_value = mock_tmp_file
+
+        result = run_release_tests("/fake", ["tests/x.spec.ts"])
+
+    assert result.error == "playwright config error"
