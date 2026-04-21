@@ -1075,6 +1075,11 @@ def _init_state() -> None:
         "rqa_board_id":    "",
         "rqa_board_name":  "",
         "release_analysis": None,
+        # Phase 7b — Handoff Docs tab
+        "hd_cards":        [],
+        "hd_list_name":    "",
+        "hd_board_id":     "",
+        "hd_board_name":   "",
         # Phase 8 — Sign Off tab
         "signoff_message": "",
         "signoff_sent":    False,
@@ -5335,15 +5340,63 @@ def main() -> None:
             "You can edit, download, attach to Trello, or send the PDF to Slack."
         )
 
-        handoff_cards = st.session_state.get("rqa_cards", [])
-        handoff_approved = st.session_state.get("rqa_approved", {})
         handoff_tc_store = st.session_state.get("rqa_test_cases", {})
-        handoff_release = st.session_state.get("rqa_release", "")
         handoff_runs = st.session_state.get("pipeline_runs", {})
 
-        approved_cards = [card for card in handoff_cards if handoff_approved.get(card.id)]
-        if not approved_cards:
-            st.info("Approve cards in 🤖 AI QA Verifier first. Approved cards will appear here.")
+        # ── Board / list selector ───────────────────────────────────────────
+        hd_board_id, hd_board_name = _select_trello_board("Trello board", "hd")
+        try:
+            _hd_trello = TrelloClient(board_id=hd_board_id) if hd_board_id else None
+            _hd_all_lists = _hd_trello.get_lists() if _hd_trello else []
+        except Exception as _hd_e:
+            st.error(f"Trello connection failed: {_hd_e}")
+            _hd_all_lists = []
+
+        _hd_list_options = {lst.name: lst.id for lst in _hd_all_lists} if _hd_all_lists else {}
+        _hd_list_names = list(_hd_list_options.keys()) or [""]
+
+        if st.button("🔄 Refresh Trello lists", key="hd_refresh_lists_btn"):
+            st.cache_data.clear()
+            st.rerun()
+
+        _hd_show_all = st.toggle("Show all lists", value=False, key="hd_show_all_lists")
+        _hd_filtered = _hd_list_names
+        if not _hd_show_all:
+            _hd_qa_names = [n for n in _hd_list_names if "qa" in n.lower() or "ready for qa" in n.lower()]
+            if _hd_qa_names:
+                _hd_filtered = _hd_qa_names
+
+        _hd_col_list, _hd_col_load = st.columns([4, 1])
+        with _hd_col_list:
+            _hd_selected_list = st.selectbox(
+                "Select Trello List",
+                options=_hd_filtered,
+                index=_hd_filtered.index(st.session_state["hd_list_name"])
+                if st.session_state.get("hd_list_name") in _hd_filtered else 0,
+                key="hd_list_selector",
+            )
+        with _hd_col_load:
+            st.markdown("<br>", unsafe_allow_html=True)
+            _hd_load_clicked = st.button("Load Cards", type="primary", key="hd_load_btn")
+
+        if _hd_load_clicked and _hd_selected_list and _hd_list_options:
+            _hd_list_id = _hd_list_options[_hd_selected_list]
+            with st.spinner(f"Loading cards from '{_hd_selected_list}'…"):
+                try:
+                    _hd_loaded = _dedupe_cards(_hd_trello.get_cards_in_list(_hd_list_id))
+                    st.session_state["hd_cards"] = _hd_loaded
+                    st.session_state["hd_list_name"] = _hd_selected_list
+                    st.session_state["hd_board_id"] = hd_board_id
+                    st.session_state["hd_board_name"] = hd_board_name
+                    st.rerun()
+                except Exception as _hd_load_err:
+                    st.error(f"Failed to load cards: {_hd_load_err}")
+
+        handoff_cards = st.session_state.get("hd_cards", [])
+        handoff_release = st.session_state.get("rqa_release", "")
+
+        if not handoff_cards:
+            st.info("Select a Trello board and list above, then click **Load Cards**.")
         else:
             from pipeline.handoff_docs import (
                 build_handoff_context,
@@ -5372,7 +5425,7 @@ def main() -> None:
                 _ai_qa_evidence = _sav_report.to_automation_context() if _sav_report else ""
                 _members = []
                 try:
-                    _trello = TrelloClient(board_id=st.session_state.get("rqa_board_id") or None)
+                    _trello = TrelloClient(board_id=st.session_state.get("hd_board_id") or st.session_state.get("rqa_board_id") or None)
                     _members = _trello.get_card_members(card.id)
                 except Exception:
                     _members = []
@@ -5388,7 +5441,7 @@ def main() -> None:
                     members=_members,
                 )
 
-            _doc_options = {card.name: card for card in approved_cards}
+            _doc_options = {card.name: card for card in handoff_cards}
             _selected_name = st.selectbox(
                 "Select approved card",
                 options=list(_doc_options.keys()),
@@ -5477,7 +5530,7 @@ def main() -> None:
                 with _act1:
                     if st.button("📎 Attach PDF to Trello", key=f"attach_trello_{doc_type}_{_target_card.id}", use_container_width=True, disabled=bool(_pdf_error)):
                         try:
-                            _trello = TrelloClient(board_id=st.session_state.get("rqa_board_id") or None)
+                            _trello = TrelloClient(board_id=st.session_state.get("hd_board_id") or st.session_state.get("rqa_board_id") or None)
                             _att = _trello.attach_file(
                                 _target_card.id,
                                 filename=_pdf_name,
