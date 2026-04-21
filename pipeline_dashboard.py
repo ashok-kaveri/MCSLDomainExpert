@@ -402,6 +402,7 @@ def _build_release_test_results_message(release: str, run_result: Any) -> str:
 
 
 def _get_repo_branches() -> list[str]:
+    import config
     repo_path = getattr(config, "MCSL_AUTOMATION_REPO_PATH", "")
     if not repo_path or not Path(repo_path).exists():
         return []
