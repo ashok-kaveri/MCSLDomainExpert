@@ -633,34 +633,33 @@ def _release_decision_snapshot(cards: list[Any], approved_store: dict[str, bool]
 _CSS = """
 <style>
 :root {
-    --bg-0: #07131b;
-    --bg-1: #0b1d27;
-    --bg-2: #102733;
-    --panel: rgba(12, 28, 37, 0.88);
-    --panel-2: rgba(16, 36, 47, 0.94);
-    --line: rgba(166, 196, 214, 0.14);
-    --line-strong: rgba(166, 196, 214, 0.24);
-    --text-1: #edf6fb;
-    --text-2: #c6d9e5;
-    --text-3: #84a3b7;
-    --accent: #67d3b0;
-    --accent-2: #9cdcf5;
-    --good: #31c271;
-    --warn: #eeaf32;
-    --bad: #f06b6b;
-    --info: #56a7ff;
-    --shadow: 0 18px 44px rgba(0, 0, 0, 0.24);
+    --bg-page: #f4f7fb;
+    --bg-panel: rgba(255, 255, 255, 0.84);
+    --bg-panel-strong: #ffffff;
+    --bg-soft: #eef4fb;
+    --line: #d9e4f1;
+    --line-strong: #c4d4e4;
+    --text-1: #142235;
+    --text-2: #425466;
+    --text-3: #66788a;
+    --accent: #2b5c8a;
+    --accent-2: #4f7aa3;
+    --good: #166534;
+    --warn: #8a5b00;
+    --bad: #b42318;
+    --info: #2b5c8a;
+    --shadow: 0 16px 38px rgba(22, 50, 79, 0.10);
 }
 
 html, body, [class*="css"]  {
-    font-family: "Avenir Next", "Segoe UI", "Helvetica Neue", sans-serif;
+    font-family: "Segoe UI", "Helvetica Neue", "Arial", sans-serif;
 }
 
 .stApp {
     background:
-        radial-gradient(circle at top left, rgba(103, 211, 176, 0.10), transparent 28%),
-        radial-gradient(circle at top right, rgba(86, 167, 255, 0.10), transparent 24%),
-        linear-gradient(180deg, var(--bg-1) 0%, var(--bg-0) 56%, #061017 100%);
+        radial-gradient(circle at top left, rgba(79, 122, 163, 0.12), transparent 28%),
+        radial-gradient(circle at top right, rgba(43, 92, 138, 0.10), transparent 22%),
+        linear-gradient(180deg, #f7faff 0%, var(--bg-page) 100%);
     color: var(--text-1);
 }
 
@@ -669,8 +668,8 @@ html, body, [class*="css"]  {
 }
 
 [data-testid="stHeader"] {
-    background: rgba(7, 19, 27, 0.74);
-    border-bottom: 1px solid rgba(166, 196, 214, 0.08);
+    background: rgba(255, 255, 255, 0.88);
+    border-bottom: 1px solid var(--line);
     backdrop-filter: blur(12px);
 }
 
@@ -682,9 +681,8 @@ html, body, [class*="css"]  {
 
 section[data-testid="stSidebar"] {
     background:
-        linear-gradient(180deg, rgba(7, 18, 25, 0.98), rgba(10, 24, 33, 0.98)),
-        radial-gradient(circle at top, rgba(103, 211, 176, 0.10), transparent 22%);
-    border-right: 1px solid rgba(166, 196, 214, 0.08);
+        linear-gradient(180deg, rgba(255,255,255,0.92) 0%, rgba(245,248,252,0.94) 100%);
+    border-right: 1px solid var(--line);
 }
 
 section[data-testid="stSidebar"] > div {
@@ -718,16 +716,16 @@ section[data-testid="stSidebar"] div {
     gap: 0.35rem;
     box-shadow: inset 0 0 0 1px rgba(255,255,255,0.08);
 }
-.badge-pass      { background: linear-gradient(135deg, #27985d, #31c271); }
-.badge-fail      { background: linear-gradient(135deg, #cb5454, #f06b6b); }
-.badge-partial   { background: linear-gradient(135deg, #cc8c1a, #eeaf32); }
-.badge-qa_needed { background: linear-gradient(135deg, #397be0, #56a7ff); }
+.badge-pass      { background: linear-gradient(135deg, #15803d, #22c55e); }
+.badge-fail      { background: linear-gradient(135deg, #b42318, #dc2626); }
+.badge-partial   { background: linear-gradient(135deg, #a16207, #d97706); }
+.badge-qa_needed { background: linear-gradient(135deg, #2b5c8a, #4f7aa3); }
 
 /* Scenario result cards */
 .scenario-card {
     border: 1px solid var(--line);
     border-left: 4px solid var(--accent);
-    background: linear-gradient(180deg, rgba(15, 34, 44, 0.95), rgba(12, 26, 35, 0.95));
+    background: linear-gradient(180deg, rgba(255,255,255,0.95), rgba(247,250,253,0.96));
     border-radius: 16px;
     padding: 14px 16px;
     margin-bottom: 12px;
@@ -755,10 +753,9 @@ section[data-testid="stSidebar"] div {
     position: relative;
     overflow: hidden;
     background:
-        radial-gradient(circle at top right, rgba(156, 220, 245, 0.18), transparent 32%),
-        radial-gradient(circle at bottom left, rgba(103, 211, 176, 0.16), transparent 28%),
-        linear-gradient(135deg, rgba(11, 29, 39, 0.98) 0%, rgba(16, 39, 51, 0.96) 100%);
-    border: 1px solid var(--line-strong);
+        radial-gradient(circle at top right, rgba(255,255,255,0.14), transparent 22%),
+        linear-gradient(135deg, #13283f 0%, #1f4568 58%, #2d638f 100%);
+    border: 1px solid rgba(255,255,255,0.10);
     box-shadow: var(--shadow);
     padding: 24px 26px;
     border-radius: 22px;
@@ -772,15 +769,29 @@ section[data-testid="stSidebar"] div {
     pointer-events: none;
 }
 .pipeline-header h1 {
-    color: var(--text-1);
+    color: #ffffff;
     font-weight: 800;
     letter-spacing: -0.04em;
     margin: 0;
 }
 .pipeline-header p {
-    color: var(--text-2);
+    color: rgba(255,255,255,0.78);
     margin: 6px 0 0 0;
     max-width: 70ch;
+}
+.pipeline-header h1,
+.pipeline-header h1 *,
+.pipeline-header p,
+.pipeline-header p * {
+    color: #ffffff !important;
+    opacity: 1 !important;
+    text-shadow: 0 1px 2px rgba(10, 24, 38, 0.18);
+}
+section[data-testid="stSidebar"] .pipeline-header h1,
+section[data-testid="stSidebar"] .pipeline-header h1 *,
+section[data-testid="stSidebar"] .pipeline-header p,
+section[data-testid="stSidebar"] .pipeline-header p * {
+    color: #ffffff !important;
 }
 
 /* Sidebar status badges */
@@ -796,15 +807,16 @@ section[data-testid="stSidebar"] div {
     border: 1px solid rgba(255,255,255,0.05);
 }
 .status-ok   { background: rgba(49, 194, 113, 0.12); color: #98efbc; }
-.status-warn { background: rgba(238, 175, 50, 0.12); color: #ffd588; }
-.status-err  { background: rgba(240, 107, 107, 0.12); color: #ffb1b1; }
+.status-warn { background: #fff4cc; color: #8a5b00; border-color: #f0d98e; }
+.status-err  { background: #fee4e2; color: #b42318; border-color: #f3b8b4; }
+.status-ok   { background: #dcfce7; color: #166534; border-color: #b7ebc6; }
 
 /* Pipeline step chips */
 .step-chip {
     display: inline-block;
-    background: rgba(103, 211, 176, 0.10);
-    color: #9fe6cb;
-    border: 1px solid rgba(103, 211, 176, 0.28);
+    background: linear-gradient(180deg, #f1f6fd 0%, #e5eef8 100%);
+    color: #16324f;
+    border: 1px solid var(--line);
     border-radius: 999px;
     padding: 4px 12px;
     font-size: 0.78rem;
@@ -822,9 +834,9 @@ section[data-testid="stSidebar"] div {
     font-size: 0.78rem;
     font-weight: 700;
 }
-.risk-low    { background: rgba(49, 194, 113, 0.12); color: #9cf2bf; }
-.risk-medium { background: rgba(238, 175, 50, 0.12); color: #ffd588; }
-.risk-high   { background: rgba(240, 107, 107, 0.14); color: #ffb1b1; }
+.risk-low    { background:#d1fae5; color:#065f46; }
+.risk-medium { background:#fef3c7; color:#92400e; }
+.risk-high   { background:#fee2e2; color:#991b1b; }
 
 /* Card step headers */
 .step-header {
@@ -834,8 +846,8 @@ section[data-testid="stSidebar"] div {
     margin: 14px 0 10px 0;
 }
 .step-num {
-    background: linear-gradient(135deg, var(--accent), var(--accent-2));
-    color: #06212c;
+    background: linear-gradient(180deg, var(--accent-2) 0%, var(--accent) 100%);
+    color: #ffffff;
     border-radius: 50%;
     width: 28px;
     height: 28px;
@@ -863,17 +875,17 @@ section[data-testid="stSidebar"] div {
     margin: 12px 0 14px 0;
 }
 .pf-step {
-    background: rgba(132, 163, 183, 0.10);
-    color: var(--text-3);
+    background: #f1f5f9;
+    color: #475569;
     padding: 6px 12px;
     border-radius: 999px;
     font-size: 0.78rem;
     font-weight: 700;
-    border: 1px solid rgba(166, 196, 214, 0.10);
+    border: 1px solid #cbd5e1;
 }
-.pf-step.done   { background: rgba(49, 194, 113, 0.12); color: #9cf2bf; }
-.pf-step.active { background: rgba(103, 211, 176, 0.14); color: #9fe6cb; }
-.pf-arrow { color: rgba(198, 217, 229, 0.36); font-size: 0.9rem; }
+.pf-step.done   { background: #d1fae5; border-color: #6ee7b7; color: #065f46; }
+.pf-step.active { background: #e0e7ff; border-color: #a5b4fc; color: #3730a3; }
+.pf-arrow { color: #94a3b8; font-size: 0.9rem; }
 
 /* Bug severity badges */
 .sev-p1, .sev-p2, .sev-p3, .sev-p4 {
@@ -890,7 +902,7 @@ section[data-testid="stSidebar"] div {
 
 /* Streamlit surfaces */
 [data-testid="stMetric"] {
-    background: linear-gradient(180deg, rgba(13, 29, 39, 0.95), rgba(11, 24, 32, 0.95));
+    background: linear-gradient(180deg, rgba(255,255,255,0.95), rgba(247,250,253,0.95));
     border: 1px solid var(--line);
     border-radius: 18px;
     box-shadow: var(--shadow);
@@ -910,16 +922,26 @@ section[data-testid="stSidebar"] div {
 [data-testid="metric-container"] [data-testid="stMetricValue"] {
     color: var(--text-1) !important;
 }
+[data-testid="stMetricLabel"],
+[data-testid="stMetricLabel"] *,
+[data-testid="stMetricValue"],
+[data-testid="stMetricValue"] * {
+    color: var(--text-1) !important;
+    opacity: 1 !important;
+}
+[data-testid="stMetricLabel"] {
+    color: var(--text-3) !important;
+}
 
 [data-testid="stExpander"] {
     border: 1px solid var(--line);
-    background: linear-gradient(180deg, rgba(12, 28, 37, 0.92), rgba(11, 25, 34, 0.92));
+    background: rgba(255,255,255,0.92);
     border-radius: 16px;
     box-shadow: var(--shadow);
     overflow: hidden;
 }
 [data-testid="stExpander"] details summary {
-    background: rgba(255,255,255,0.02);
+    background: linear-gradient(180deg, rgba(248, 251, 255, 0.96) 0%, rgba(241, 246, 251, 0.96) 100%);
     color: var(--text-1);
     font-weight: 650;
 }
@@ -929,9 +951,9 @@ div[data-baseweb="input"] > div,
 .stTextInput input,
 .stTextArea textarea,
 .stNumberInput input {
-    background: rgba(10, 23, 31, 0.92) !important;
+    background: rgba(255,255,255,0.96) !important;
     color: var(--text-1) !important;
-    border: 1px solid var(--line-strong) !important;
+    border: 1px solid var(--line) !important;
     border-radius: 14px !important;
 }
 
@@ -949,43 +971,130 @@ div[data-baseweb="input"] > div,
     color: var(--text-2) !important;
     font-weight: 650 !important;
 }
+[data-testid="stCheckbox"] label,
+[data-testid="stCheckbox"] label p,
+[data-testid="stToggle"] label,
+[data-testid="stToggle"] label p,
+[data-testid="stRadio"] label,
+[data-testid="stRadio"] label p {
+    color: var(--text-1) !important;
+    opacity: 1 !important;
+}
+[data-testid="stToggle"] [role="switch"] {
+    background: #d7dee8 !important;
+    border: 1px solid #8fa6bf !important;
+    box-shadow: inset 0 1px 2px rgba(20, 34, 53, 0.10);
+    opacity: 1 !important;
+}
+[data-testid="stToggle"] [role="switch"][aria-checked="true"] {
+    background: linear-gradient(90deg, #2b5c8a 0%, #4f7aa3 100%) !important;
+    border-color: #2b5c8a !important;
+    opacity: 1 !important;
+}
+[data-testid="stToggle"] [role="switch"] > div {
+    background: #ffffff !important;
+    border: 1px solid rgba(20, 34, 53, 0.10) !important;
+    box-shadow: 0 1px 4px rgba(20, 34, 53, 0.22) !important;
+    opacity: 1 !important;
+}
+[data-testid="stToggle"] [role="switch"]::before,
+[data-testid="stToggle"] [role="switch"]::after {
+    opacity: 1 !important;
+}
 
 .stButton > button,
 [data-testid="stDownloadButton"] > button {
-    border-radius: 999px !important;
-    border: 1px solid rgba(156, 220, 245, 0.18) !important;
-    background: linear-gradient(135deg, rgba(18, 46, 58, 0.98), rgba(14, 34, 45, 0.98)) !important;
+    border-radius: 14px !important;
+    border: 1px solid var(--line) !important;
+    background: linear-gradient(180deg, #ffffff 0%, #f5f8fc 100%) !important;
     color: var(--text-1) !important;
     font-weight: 700 !important;
     letter-spacing: 0.01em;
     box-shadow: 0 10px 24px rgba(0,0,0,0.22);
 }
+.stButton > button,
+.stButton > button span,
+.stButton > button p,
+.stButton > button div,
+.stButton > button svg,
+[data-testid="stDownloadButton"] > button,
+[data-testid="stDownloadButton"] > button span,
+[data-testid="stDownloadButton"] > button p,
+[data-testid="stDownloadButton"] > button div,
+[data-testid="stDownloadButton"] > button svg {
+    color: var(--text-1) !important;
+    fill: var(--text-1) !important;
+    stroke: var(--text-1) !important;
+    opacity: 1 !important;
+}
 .stButton > button[kind="primary"] {
-    background: linear-gradient(135deg, #67d3b0, #8bcff0) !important;
-    color: #06212c !important;
-    border-color: transparent !important;
+    background: linear-gradient(180deg, #214b73 0%, #173451 100%) !important;
+    color: #ffffff !important;
+    border-color: #173451 !important;
+}
+.stButton > button[kind="primary"],
+.stButton > button[kind="primary"] span,
+.stButton > button[kind="primary"] p,
+.stButton > button[kind="primary"] div,
+.stButton > button[kind="primary"] svg {
+    color: #ffffff !important;
+    fill: #ffffff !important;
+    stroke: #ffffff !important;
+    opacity: 1 !important;
 }
 .stButton > button:hover,
 [data-testid="stDownloadButton"] > button:hover {
-    border-color: rgba(156, 220, 245, 0.34) !important;
+    border-color: var(--accent-2) !important;
     transform: translateY(-1px);
 }
 
 button[data-baseweb="tab"] {
     font-weight: 700 !important;
     color: var(--text-3) !important;
-    border-radius: 14px 14px 0 0 !important;
+    border-radius: 999px !important;
     padding-left: 1rem !important;
     padding-right: 1rem !important;
 }
+button[data-baseweb="tab"],
+button[data-baseweb="tab"] span,
+button[data-baseweb="tab"] p,
+button[data-baseweb="tab"] div,
+button[data-baseweb="tab"] svg {
+    color: var(--text-3) !important;
+    fill: var(--text-3) !important;
+    stroke: var(--text-3) !important;
+    opacity: 1 !important;
+}
 button[data-baseweb="tab"][aria-selected="true"] {
-    color: var(--text-1) !important;
-    background: rgba(255,255,255,0.04) !important;
+    color: #16324f !important;
+    background: linear-gradient(180deg, #e8f1fa 0%, #dce8f5 100%) !important;
+    border: 1px solid var(--line-strong) !important;
+}
+button[data-baseweb="tab"][aria-selected="true"],
+button[data-baseweb="tab"][aria-selected="true"] span,
+button[data-baseweb="tab"][aria-selected="true"] p,
+button[data-baseweb="tab"][aria-selected="true"] div,
+button[data-baseweb="tab"][aria-selected="true"] svg {
+    color: #16324f !important;
+    fill: #16324f !important;
+    stroke: #16324f !important;
 }
 
 [data-testid="stTabs"] [data-baseweb="tab-list"] {
     gap: 0.35rem;
-    border-bottom: 1px solid rgba(166, 196, 214, 0.08);
+    border-bottom: 1px solid var(--line);
+    flex-wrap: wrap !important;
+    overflow: visible !important;
+    scrollbar-width: none;
+}
+[data-testid="stTabs"] [data-baseweb="tab-list"]::-webkit-scrollbar {
+    display: none;
+}
+[data-testid="stTabs"] {
+    overflow: visible !important;
+}
+[data-testid="stTabs"] [role="tablist"] {
+    overflow: visible !important;
 }
 
 .stAlert {
@@ -2198,7 +2307,7 @@ def main() -> None:
 
     with tab_devdone:
         st.subheader("🔀 Move Cards")
-        st.caption("Move Trello cards between lists in bulk with an audit comment.")
+        st.caption("Pick a source list, review the loaded cards, and move the selected cards to the next Trello list with an audit comment.")
 
         dd_board_id, _dd_board_name = _select_trello_board("Trello board", "dd")
         if not dd_board_id and trello_ok:
@@ -2217,28 +2326,33 @@ def main() -> None:
             _dd_list_names = []
             _dd_list_id_map = {}
 
-        col_src, col_tgt, col_load = st.columns([3, 3, 1])
+        col_src, col_arrow, col_tgt, col_load = st.columns([3, 0.4, 3, 1.2])
         with col_src:
             source_list = st.selectbox(
-                "Source list",
+                "📂 Source list",
                 _dd_list_names or ["Dev Done"],
                 key="dd_list_select",
                 index=0,
             )
+        with col_arrow:
+            st.write("")
+            st.write("")
+            st.markdown("**→**")
         with col_tgt:
             # Default target: "Ready for QA" if present, else first list
             default_tgt_idx = 0
             if "Ready for QA" in _dd_list_names:
                 default_tgt_idx = _dd_list_names.index("Ready for QA")
             st.selectbox(
-                "Target list",
+                "📁 Target list",
                 _dd_list_names or ["Ready for QA"],
                 key="dd_move_target",
                 index=default_tgt_idx,
             )
         with col_load:
-            st.write("")  # vertical align
-            load_btn = st.button("📥 Load", key="dd_load_btn")
+            st.write("")
+            st.write("")
+            load_btn = st.button("📥 Load Cards", key="dd_load_btn", use_container_width=True)
 
         if load_btn:
             source_id = _dd_list_id_map.get(source_list, "")
@@ -2260,6 +2374,7 @@ def main() -> None:
         cards = st.session_state.get("dd_cards", [])
         if cards:
             st.divider()
+            st.markdown(f"**{len(cards)} cards** loaded from `{source_list}`")
             # Select-all toggle
             select_all = st.checkbox(
                 f"Select all ({len(cards)} cards)",
@@ -2273,18 +2388,30 @@ def main() -> None:
             # Per-card checkboxes
             checked = st.session_state.get("dd_checked", {})
             for card in cards:
-                checked[card.id] = st.checkbox(
-                    card.name,
-                    key=f"dd_chk_{card.id}",
-                    value=checked.get(card.id, False),
-                )
+                _dd_col1, _dd_col2 = st.columns([1, 9])
+                with _dd_col1:
+                    checked[card.id] = st.checkbox(
+                        "",
+                        key=f"dd_chk_{card.id}",
+                        value=checked.get(card.id, False),
+                    )
+                with _dd_col2:
+                    with st.expander(f"{'☑️' if checked.get(card.id) else '🔲'} {card.name}", expanded=False):
+                        if getattr(card, "labels", None):
+                            st.caption("🏷️ " + " · ".join(card.labels))
+                        if card.desc:
+                            st.markdown(card.desc[:600] + ("…" if len(card.desc) > 600 else ""))
+                        else:
+                            st.caption("_No description_")
+                        if getattr(card, "url", ""):
+                            st.caption(f"🔗 {card.url}")
             st.session_state["dd_checked"] = checked
 
             # ── Move button ───────────────────────────────────────────────
             n_checked = sum(1 for v in checked.values() if v)
             move_target = st.session_state.get("dd_move_target", "")
             if st.button(f"➡️ Move {n_checked} cards", key="dd_move_btn",
-                         type="primary", disabled=(n_checked == 0)):
+                         type="primary", disabled=(n_checked == 0), use_container_width=True):
                 target_id = _dd_list_id_map.get(move_target, "")
                 if not target_id:
                     st.warning(f"Target list '{move_target}' not found.")
@@ -4018,7 +4145,7 @@ def main() -> None:
                         st.divider()
                         _step_header("3", "Final Approval")
                         st.caption(
-                            "Review AI QA results, confirm sheet destination, handle duplicate test cases, "
+                            "Review AI QA results, confirm the sheet destination, handle duplicate test cases, "
                             "and finalize approval for the card."
                         )
 
@@ -4043,7 +4170,12 @@ def main() -> None:
                             if _has_unresolved_qa_needed:
                                 st.warning("Resolve the QA Needed scenarios in Step 2 before approving this card.")
                             if _tc_saved:
-                                st.success("✅ Test cases were already published in Generate TC. This step is final approval.")
+                                st.success("✅ Test cases were already published in Generate TC. This step only finalizes AI QA approval.")
+                            else:
+                                st.warning(
+                                    "⚠️ Test cases have not been published yet. Save them in Generate TC first, "
+                                    "or use the fallback approve-and-save flow below."
+                                )
                             _suggested_tab = detect_tab(card.name, _tc_markdown)
                             _tab_created_key = f"sheet_tab_created_{card.id}"
                             _new_tab_key = f"sheet_new_tab_{card.id}"
@@ -4094,7 +4226,9 @@ def main() -> None:
                                 epic=card.name,
                                 positive_only=True,
                             )
-                            st.caption("Approving saves a QA summary comment to Trello and positive test-case rows to Google Sheets.")
+                            st.caption(
+                                "Approving saves a QA summary comment to Trello and writes positive test-case rows to Google Sheets."
+                            )
                             _metric_col1, _metric_col2 = st.columns(2)
                             with _metric_col1:
                                 st.metric("Google Sheets rows to write", len(_parsed_rows))
