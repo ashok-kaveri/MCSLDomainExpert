@@ -2898,6 +2898,25 @@ def main() -> None:
                                         for _item in _fixes:
                                             st.markdown(f"- {_item}")
 
+                            if st.button("✨ Review & Improve AC", key=f"review_ac_{card.id}", help="Run an extra review pass to catch gaps and rewrite if needed (takes ~10s extra)"):
+                                try:
+                                    with st.spinner("Reviewing and improving AC…"):
+                                        _raw = f"{card.name}\n\n{card.desc or ''}".strip()
+                                        _research = st.session_state.get(_ac_research_key) or ""
+                                        _improved = generate_acceptance_criteria(
+                                            raw_request=_raw,
+                                            attachments=card.attachments or None,
+                                            checklists=card.checklists or None,
+                                            research_context=_research,
+                                            comments_context="\n".join(getattr(card, "comments", []) or []),
+                                            review=True,
+                                        )
+                                    st.session_state[_ac_key] = _improved
+                                    st.session_state[_ac_review_key] = get_last_ac_review()
+                                    st.rerun()
+                                except Exception as _rev_err:
+                                    st.error(f"Review failed: {_rev_err}")
+
                             _ac_btn1, _ac_btn2, _ac_btn3, _ac_btn4, _ac_btn5 = st.columns(5)
                             with _ac_btn1:
                                 if st.button("✅ Save to Trello Description", key=f"save_ac_{card.id}", use_container_width=True, type="primary"):

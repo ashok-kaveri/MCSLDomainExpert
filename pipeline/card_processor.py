@@ -523,8 +523,13 @@ def generate_acceptance_criteria(
     checklists: list[dict] | None = None,
     research_context: str | None = None,
     comments_context: str | None = None,
+    *,
+    review: bool = False,
 ) -> str:
-    """Generate acceptance criteria for a feature request using Claude."""
+    """Generate acceptance criteria for a feature request using Claude.
+
+    Set review=True to run an additional review-and-rewrite pass (slower but may improve quality).
+    """
     generation_brief = _build_generation_brief(
         raw_request=raw_request,
         attachments=attachments or [],
@@ -540,9 +545,13 @@ def generate_acceptance_criteria(
     )
     llm = _make_llm(model=model, temperature=0.3, max_tokens=2048)
     response = llm.invoke([HumanMessage(content=prompt)])
+    ac_markdown = response.content.strip()
+    if not review:
+        _set_last_ac_review(_DEFAULT_REVIEW_STATE)
+        return ac_markdown
     return _review_and_rewrite_ac(
         raw_request=raw_request,
-        ac_markdown=response.content.strip(),
+        ac_markdown=ac_markdown,
         generation_brief=generation_brief,
         research_context=research_context or "None",
         model=model,
