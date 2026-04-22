@@ -213,6 +213,60 @@ def test_mc01_audit_comment():
     assert "actions/comments" in call_url
 
 
+def test_mc01_get_card_comments_includes_copied_comments():
+    """get_card_comments() should include both direct and copied Trello comments."""
+    fake_actions = [
+        {"type": "commentCard", "data": {"text": "Direct comment"}},
+        {"type": "copyCommentCard", "data": {"text": "Copied comment from source card"}},
+        {"type": "updateCard", "data": {"text": "ignore me"}},
+    ]
+    mock_response = MagicMock()
+    mock_response.json.return_value = fake_actions
+    mock_response.raise_for_status = MagicMock()
+
+    with patch("requests.get", return_value=mock_response) as mock_get:
+        from pipeline.trello_client import TrelloClient
+        client = TrelloClient(api_key="k", token="t", board_id="b")
+        comments = client.get_card_comments("card123")
+
+    mock_get.assert_called_once()
+    assert comments == ["Direct comment", "Copied comment from source card"]
+
+
+def test_mc01_get_card_returns_rich_trello_card():
+    """get_card() should return a full TrelloCard including labels/comments/attachments/checklists."""
+    card_json = {
+        "id": "card123",
+        "name": "My Feature",
+        "desc": "Card description",
+        "url": "https://trello.com/c/card123",
+        "idList": "list1",
+        "labels": [{"name": "SL: Shopify MCSL"}, {"name": "SL: International & Customs"}],
+        "idMembers": ["m1"],
+    }
+    comments_json = [{"type": "commentCard", "data": {"text": "Direct comment"}}]
+    attachments_json = [{"name": "spec.pdf", "url": "https://example.com/spec.pdf"}]
+    checklists_json = [{"name": "QA", "checkItems": [{"name": "Verify label", "state": "incomplete"}]}]
+
+    responses = []
+    for payload in (card_json, comments_json, attachments_json, checklists_json):
+        mock_response = MagicMock()
+        mock_response.json.return_value = payload
+        mock_response.raise_for_status = MagicMock()
+        responses.append(mock_response)
+
+    with patch("requests.get", side_effect=responses):
+        from pipeline.trello_client import TrelloClient
+        client = TrelloClient(api_key="k", token="t", board_id="b")
+        card = client.get_card("card123")
+
+    assert card.id == "card123"
+    assert card.labels == ["SL: Shopify MCSL", "SL: International & Customs"]
+    assert card.comments == ["Direct comment"]
+    assert card.attachments == [{"name": "spec.pdf", "url": "https://example.com/spec.pdf"}]
+    assert card.checklists == [{"name": "QA", "items": [{"name": "Verify label", "state": "incomplete"}]}]
+
+
 # ---------------------------------------------------------------------------
 # HIST-01: history persistence (skips gracefully if 06-03 not yet done)
 # ---------------------------------------------------------------------------
@@ -289,6 +343,91 @@ def test_rqa05_analyse_release_returns_report():
     assert isinstance(result, ReleaseAnalysis)
     assert result.risk_level in {"LOW", "MEDIUM", "HIGH"}
     assert result.error == ""
+
+
+def test_rqa05_analyse_release_accepts_content_blocks():
+    """analyse_release() should parse Anthropic content-block responses without fallback."""
+    fake_response = MagicMock()
+    fake_response.content = [
+        {
+            "type": "text",
+            "text": '{"risk_level":"LOW","risk_summary":"No conflicts","conflicts":[],"ordering":[],"coverage_gaps":[],"kb_context_summary":"","sources":[]}',
+        }
+    ]
+
+    import config as _config
+    with patch("pipeline.release_analyser.ChatAnthropic") as mock_claude, \
+         patch("rag.vectorstore.search", return_value=[]), \
+         patch.object(_config, "ANTHROPIC_API_KEY", "fake-key"):
+        mock_llm = MagicMock()
+        mock_llm.invoke.return_value = fake_response
+        mock_claude.return_value = mock_llm
+
+        from pipeline.release_analyser import analyse_release, CardSummary, ReleaseAnalysis
+        result = analyse_release(
+            "v1.2",
+            [CardSummary(card_id="c1", card_name="FedEx Label", card_desc="Add FedEx label")],
+        )
+
+    assert isinstance(result, ReleaseAnalysis)
+    assert result.risk_level == "LOW"
+    assert result.error == ""
+    assert result.risk_summary == "No conflicts"
+
+
+def test_rqa05_card_summary_combined_text_includes_comments_labels_and_checklists():
+    """Release analysis should see the same richer Trello evidence set, not just title + desc."""
+    from pipeline.release_analyser import CardSummary
+
+    card = CardSummary(
+        card_id="c1",
+        card_name="From SL: ZI-021",
+        card_desc="Minimum customs value floor",
+        card_comments=["Check FedEx label generation", "Validate FedEx compliance"],
+        card_labels=["SL: International & Customs", "SL: Shopify MCSL"],
+        card_checklists=[{"name": "QA", "items": [{"name": "Verify value floored to $1"}]}],
+    )
+
+    combined = card.combined_text()
+
+    assert "Check FedEx label generation" in combined
+    assert "Validate FedEx compliance" in combined
+    assert "SL: International & Customs" in combined
+    assert "Verify value floored to $1" in combined
+
+
+def test_rqa06_diagnose_ticket_forces_carrier_specific_when_comments_name_carrier():
+    """diagnose_ticket() should override model drift when card text/comments explicitly name a carrier."""
+    import config as _config
+    from pipeline.ticket_diagnoser import diagnose_ticket
+
+    fake_response = MagicMock()
+    fake_response.content = (
+        '{"issue_type":"feature","carrier_scope":"generic","likely_root_cause":"request_or_label_api",'
+        '"confidence":"medium","summary":"Model guessed generic","evidence":[],"next_checks":[],"suggested_test_strategy":[]}'
+    )
+
+    ticket_text = (
+        "From SL: ZI-021 — Enhancement: minimum customs value floor\\n"
+        "PR: Enforce minimum customs value of 1 in FedEx request builders\\n"
+        "[MANUAL TESTING REQUIRED - COMPLIANCE]\\n"
+        "- Check FedEx label generation\\n"
+        "- Test other carriers for no impact\\n"
+        "- Validate FedEx compliance"
+    )
+
+    with patch("langchain_anthropic.ChatAnthropic") as mock_claude, \
+         patch("rag.vectorstore.search", return_value=[]), \
+         patch("rag.code_indexer.search_code", return_value=[]), \
+         patch.object(_config, "ANTHROPIC_API_KEY", "fake-key"):
+        mock_llm = MagicMock()
+        mock_llm.invoke.return_value = fake_response
+        mock_claude.return_value = mock_llm
+
+        result = diagnose_ticket(ticket_text)
+
+    assert result.carrier_scope == "carrier_specific"
+    assert any("FedEx" in item for item in result.evidence)
 
 
 def test_rqa05_analyse_release_empty_cards():
@@ -454,6 +593,33 @@ def test_rqa01_validate_card_malformed_json_uses_fallback_message():
 
     assert isinstance(result, dv.ValidationReport)
     assert result.error == "Validator returned malformed JSON; fallback validation was used."
+
+
+def test_rqa01_validate_card_accepts_content_blocks():
+    """validate_card() should parse Anthropic content-block responses without fallback."""
+    import config
+    import pipeline.domain_validator as dv
+
+    fake_response = MagicMock()
+    fake_response.content = [
+        {
+            "type": "text",
+            "text": '{"overall_status":"PASS","summary":"Looks good","requirement_gaps":[],"ac_gaps":[],"accuracy_issues":[],"suggestions":[],"kb_insights":"Grounded in MCSL context."}',
+        }
+    ]
+
+    with patch.object(dv, "_make_llm") as mock_llm_factory, \
+         patch.object(config, "ANTHROPIC_API_KEY", "test-key"):
+        mock_llm = MagicMock()
+        mock_llm.invoke.return_value = fake_response
+        mock_llm_factory.return_value = mock_llm
+
+        result = dv.validate_card("Add FedEx signature", "User wants signature on delivery")
+
+    assert isinstance(result, dv.ValidationReport)
+    assert result.overall_status == "PASS"
+    assert result.error == ""
+    assert result.summary == "Looks good"
 
 
 # ---------------------------------------------------------------------------

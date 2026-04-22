@@ -1,4 +1,8 @@
-"""Compatibility shim for `langchain_core` — delegates to the real package when installed."""
+"""Compatibility shim for `langchain_core`.
+
+Prefer the real installed package when it exists outside the repository. Fall
+back to the tiny local test shims only in reduced environments.
+"""
 from __future__ import annotations
 
 from importlib.machinery import PathFinder

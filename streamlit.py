@@ -24,9 +24,20 @@ def _load_real_streamlit() -> ModuleType | None:
     spec = PathFinder.find_spec("streamlit", search_path)
     if not spec or not spec.loader:
         return None
+    current_module = sys.modules.get(__name__)
     module = module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
+    try:
+        # Register the real package before execution so Streamlit's internal
+        # imports like `from streamlit import logger` resolve to the real module.
+        sys.modules[__name__] = module
+        spec.loader.exec_module(module)
+        return module
+    except Exception:
+        if current_module is not None:
+            sys.modules[__name__] = current_module
+        else:
+            sys.modules.pop(__name__, None)
+        return None
 
 
 _real_streamlit = _load_real_streamlit()

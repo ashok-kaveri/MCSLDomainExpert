@@ -14,7 +14,9 @@ import os
 import re
 import threading
 import urllib.request
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
 from dataclasses import dataclass, field as dc_field
+from functools import lru_cache
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -50,6 +52,7 @@ _DEFAULT_REVIEW_STATE: dict[str, object] = {
     "rewrite_instructions": [],
 }
 _REVIEW_STATE = threading.local()
+_LLM_TIMEOUT_SECONDS = int(os.environ.get("MCSL_LLM_TIMEOUT_SECONDS", "90"))
 
 
 def _make_llm(
@@ -64,6 +67,21 @@ def _make_llm(
         temperature=temperature,
         max_tokens=max_tokens,
     )
+
+
+def _invoke_llm_with_timeout(llm, prompt: str, *, timeout_seconds: int | None = None):
+    timeout = timeout_seconds or _LLM_TIMEOUT_SECONDS
+    executor = ThreadPoolExecutor(max_workers=1)
+    future = executor.submit(llm.invoke, [HumanMessage(content=prompt)])
+    try:
+        return future.result(timeout=timeout)
+    except FuturesTimeoutError as exc:
+        raise TimeoutError(
+            f"Claude request timed out after {timeout}s. "
+            "Try again or reduce the card context size."
+        ) from exc
+    finally:
+        executor.shutdown(wait=False, cancel_futures=True)
 
 
 def _set_last_ac_review(data: dict[str, object]) -> None:
@@ -544,7 +562,7 @@ def generate_acceptance_criteria(
         research_context=research_context or "None",
     )
     llm = _make_llm(model=model, temperature=0.3, max_tokens=2048)
-    response = llm.invoke([HumanMessage(content=prompt)])
+    response = _invoke_llm_with_timeout(llm, prompt)
     ac_markdown = response.content.strip()
     if not review:
         _set_last_ac_review(_DEFAULT_REVIEW_STATE)
@@ -558,20 +576,21 @@ def generate_acceptance_criteria(
     )
 
 
-def generate_test_cases(card, model: str | None = None) -> str:
+def generate_test_cases(card, model: str | None = None, ac_text: str | None = None) -> str:
     """Generate test cases for a TrelloCard using Claude.
 
     card is a TrelloCard — uses card.name, card.desc, card.comments.
     """
     comments = getattr(card, "comments", None) or []
     comments_text = "\n".join(comments) if comments else "None"
-    ac_text_str = card.desc or "(no AC yet)"
+    _requirements_text = (ac_text or card.desc or "").strip()
+    ac_text_str = _requirements_text or "(no AC yet)"
     dev_comments_section = _build_dev_comments_section(comments)
 
     try:
         from pipeline.carrier_knowledge import carrier_research_context
 
-        carrier_context = carrier_research_context(card.name, card.desc or "", comments_text)
+        carrier_context = carrier_research_context(card.name, _requirements_text, comments_text)
     except Exception:
         carrier_context = "Carrier scope unavailable."
     carrier_context_section = (
@@ -579,9 +598,9 @@ def generate_test_cases(card, model: str | None = None) -> str:
         if carrier_context and carrier_context != "Carrier scope unavailable."
         else ""
     )
-    rag_context_section = _build_rag_context_section(card.name, card.desc or "")
-    code_context_section = _build_code_context_section(card.name, card.desc or "")
-    feedback_context_section = _build_feedback_context_section(card.name, card.desc or "")
+    rag_context_section = _build_rag_context_section(card.name, _requirements_text)
+    code_context_section = _build_code_context_section(card.name, _requirements_text)
+    feedback_context_section = _build_feedback_context_section(card.name, _requirements_text)
 
     ctx_parts = []
     if dev_comments_section:
@@ -610,7 +629,7 @@ def generate_test_cases(card, model: str | None = None) -> str:
 
     prompt = TEST_CASE_PROMPT.format(
         card_name=card.name,
-        card_desc=card.desc or "(no description)",
+        card_desc=_requirements_text or "(no description)",
         dev_comments_section=dev_comments_section,
         carrier_context_section=carrier_context_section,
         rag_context_section=rag_context_section,
@@ -619,10 +638,10 @@ def generate_test_cases(card, model: str | None = None) -> str:
         ac_text=ac_text_str,
     )
     llm = _make_llm(model=model, temperature=0.3, max_tokens=2048)
-    response = llm.invoke([HumanMessage(content=prompt)])
+    response = _invoke_llm_with_timeout(llm, prompt)
     return _review_and_rewrite_test_cases(
         card_name=card.name,
-        card_desc=card.desc or "(no description)",
+        card_desc=_requirements_text or "(no description)",
         test_cases_markdown=response.content.strip(),
         supporting_context=supporting_context,
         model=model,
@@ -645,7 +664,7 @@ def _review_and_rewrite_ac(
         ac_markdown=ac_markdown or "(empty)",
     )
     try:
-        review_resp = llm.invoke([HumanMessage(content=review_prompt)])
+        review_resp = _invoke_llm_with_timeout(llm, review_prompt)
         review_raw = re.sub(r"```(?:json)?", "", review_resp.content.strip()).strip().rstrip("`").strip()
         review_data = json.loads(review_raw)
     except Exception:
@@ -671,7 +690,7 @@ def _review_and_rewrite_ac(
         review_summary=review_summary,
         ac_markdown=ac_markdown,
     )
-    rewrite_resp = llm.invoke([HumanMessage(content=rewrite_prompt)])
+    rewrite_resp = _invoke_llm_with_timeout(llm, rewrite_prompt)
     return rewrite_resp.content.strip()
 
 
@@ -696,7 +715,7 @@ def review_acceptance_criteria(
         ac_markdown=ac_markdown or "(empty)",
     )
     try:
-        review_resp = llm.invoke([HumanMessage(content=review_prompt)])
+        review_resp = _invoke_llm_with_timeout(llm, review_prompt)
         review_raw = re.sub(r"```(?:json)?", "", review_resp.content.strip()).strip().rstrip("`").strip()
         review_data = json.loads(review_raw)
     except Exception:
@@ -725,6 +744,12 @@ def _build_dev_comments_section(comments: list[str]) -> str:
 
 def _build_rag_context_section(card_name: str, card_desc: str) -> str:
     """Query the QA knowledge base for relevant prior test coverage."""
+    return _build_rag_context_section_cached(card_name or "", card_desc or "")
+
+
+@lru_cache(maxsize=128)
+def _build_rag_context_section_cached(card_name: str, card_desc: str) -> str:
+    """Cached QA knowledge-base context for TC generation."""
     try:
         from rag.vectorstore import search
 
@@ -757,6 +782,12 @@ def _build_rag_context_section(card_name: str, card_desc: str) -> str:
 
 def _build_code_context_section(card_name: str, card_desc: str) -> str:
     """Query indexed MCSL code for automation, backend, and frontend context."""
+    return _build_code_context_section_cached(card_name or "", card_desc or "")
+
+
+@lru_cache(maxsize=128)
+def _build_code_context_section_cached(card_name: str, card_desc: str) -> str:
+    """Cached indexed code context for TC generation."""
     try:
         from rag.code_indexer import get_index_stats, search_code
 
@@ -795,6 +826,12 @@ def _build_code_context_section(card_name: str, card_desc: str) -> str:
 
 def _build_feedback_context_section(card_name: str, card_desc: str) -> str:
     """Optionally include retrospective QA learnings if that module exists."""
+    return _build_feedback_context_section_cached(card_name or "", card_desc or "")
+
+
+@lru_cache(maxsize=128)
+def _build_feedback_context_section_cached(card_name: str, card_desc: str) -> str:
+    """Cached retrospective QA learnings for TC generation."""
     try:
         from pipeline.qa_feedback import build_feedback_context
 
@@ -848,7 +885,7 @@ def _review_and_rewrite_test_cases(
         test_cases_markdown=test_cases_markdown or "(empty)",
     )
     try:
-        review_resp = llm.invoke([HumanMessage(content=review_prompt)])
+        review_resp = _invoke_llm_with_timeout(llm, review_prompt)
         review_raw = re.sub(r"```(?:json)?", "", review_resp.content.strip()).strip().rstrip("`").strip()
         review_data = json.loads(review_raw)
     except Exception:
@@ -875,7 +912,7 @@ def _review_and_rewrite_test_cases(
         review_summary=review_summary,
         test_cases_markdown=test_cases_markdown,
     )
-    rewrite_resp = llm.invoke([HumanMessage(content=rewrite_prompt)])
+    rewrite_resp = _invoke_llm_with_timeout(llm, rewrite_prompt)
     return rewrite_resp.content.strip()
 
 
@@ -896,7 +933,7 @@ def review_test_cases(
         test_cases_markdown=test_cases_markdown or "(empty)",
     )
     try:
-        review_resp = llm.invoke([HumanMessage(content=review_prompt)])
+        review_resp = _invoke_llm_with_timeout(llm, review_prompt)
         review_raw = re.sub(r"```(?:json)?", "", review_resp.content.strip()).strip().rstrip("`").strip()
         review_data = json.loads(review_raw)
     except Exception:
@@ -914,19 +951,26 @@ def get_last_tc_review() -> dict[str, object]:
     return _get_last_review("last_tc_review")
 
 
-def regenerate_with_feedback(card, previous_test_cases: str, feedback: str, model: str | None = None) -> str:
+def regenerate_with_feedback(
+    card,
+    previous_test_cases: str,
+    feedback: str,
+    model: str | None = None,
+    ac_text: str | None = None,
+) -> str:
     """Regenerate test cases using explicit reviewer feedback."""
+    _requirements_text = (ac_text or card.desc or "").strip()
     llm = _make_llm(model=model, temperature=0.3, max_tokens=2048)
     prompt = REGENERATE_PROMPT.format(
         card_name=card.name,
-        card_desc=card.desc or "(no description)",
+        card_desc=_requirements_text or "(no description)",
         previous_test_cases=previous_test_cases,
         feedback=feedback,
     )
-    response = llm.invoke([HumanMessage(content=prompt)])
+    response = _invoke_llm_with_timeout(llm, prompt)
     return _review_and_rewrite_test_cases(
         card_name=card.name,
-        card_desc=card.desc or "(no description)",
+        card_desc=_requirements_text or "(no description)",
         test_cases_markdown=response.content.strip(),
         model=model,
     )

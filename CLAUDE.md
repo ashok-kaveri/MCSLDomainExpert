@@ -1,108 +1,166 @@
 # CLAUDE.md
 
-Project notes for future Claude/Codex work in this repo.
+Working notes for future agents in this repo.
 
-## Product Context
+## Read This First
 
-This project is the MCSL version of the FedEx Domain Expert platform.
+If docs and code disagree, trust current code, especially:
+- [pipeline_dashboard.py](/Users/madan/Documents/MCSLDomainExpert/pipeline_dashboard.py:1)
 
-Do not copy FedEx app navigation.
-Do copy the FedEx workflow pattern where it makes sense:
-- Trello-driven release flow
-- AC generation and validation
-- TC generation and review
-- AI QA verification
-- approval and sign-off
-- automation writing support
+Use these docs as the current handoff set:
+- [README.md](/Users/madan/Documents/MCSLDomainExpert/README.md:1)
+- [docs/FEDEX_FLOW_PARITY_NOTES.md](/Users/madan/Documents/MCSLDomainExpert/docs/FEDEX_FLOW_PARITY_NOTES.md:1)
+- [docs/MCSL_PLATFORM_ADAPTATION_PLAN.md](/Users/madan/Documents/MCSLDomainExpert/docs/MCSL_PLATFORM_ADAPTATION_PLAN.md:1)
+- [docs/MCSL_CARRIER_KNOWLEDGE_RESEARCH.md](/Users/madan/Documents/MCSLDomainExpert/docs/MCSL_CARRIER_KNOWLEDGE_RESEARCH.md:1)
 
-## Current QA Tab Split
+## Repo Intent
 
-The old single `Release QA` tab has been replaced with:
+This is the MCSL version of the QA orchestration platform.
 
+Do:
+- reuse FedEx workflow shape where it helps QA flow
+- keep validation, diagnosis, automation targeting, and request reasoning MCSL-native
+- prefer current implementation over old planning notes
+
+Do not:
+- copy FedEx navigation assumptions into MCSL
+- replace MCSL rules with FedEx rules
+- treat stale docs as source of truth without checking the dashboard code
+
+## Current Dashboard Split
+
+Keep this split unless the user explicitly asks to change it:
 1. `🧾 Validate AC`
 2. `🧪 Generate TC`
 3. `🤖 AI QA Verifier`
 4. `⚙️ Generate Automation Script`
 
-Keep this split unless the user explicitly asks to change it.
-
-Shared release state is stored in Streamlit session and reused across the four tabs:
+Shared release state is stored in Streamlit session and reused across tabs:
 - board
 - list
 - release label
 - loaded cards
 - validations
+- diagnoses
+- release analysis
+- AC drafts
 - test cases
 - AI QA reports
 - approvals
+- automation outputs
 
-## MCSL Toggle Rules
+## Validate AC Rules
 
-FedEx toggle flow is not enough for MCSL.
+Current intended flow:
+- `Load Cards`
+- auto-run MCSL validation, diagnosis, and release analysis
+- show `Release Intelligence`
+- show `Step 1: Card Requirements`
+- run MCSL-specific toggle/store-state handling if needed
+- show `AI Suggested User Story & AC`
+- show `Domain Validation`
+- allow `Apply Fixes to AC`
+- allow `Re-validate after fix`
 
-Current implementation:
-- detect toggle names from card description, title, and comments
-- auto-read store name from automation config if available
-- notify Ashok or developer via Slack
-- allow reply polling and escalation
+Important:
+- there should not be a separate `Analyze loaded cards` button
+- generated AC should be revalidated immediately
+- fix and revalidate should preserve research context
+- MCSL toggle flow should remain MCSL-specific
 
-Required MCSL direction:
-- read `storeUUID` and `accountUUID` from the MCSL home/orders API
-- read `/toggles` API to determine actual toggle state
-- prefer UUID-based toggle notification payloads over only store URL/store name
+## Generate TC Rules
 
-If touching toggle flow, keep the current Slack/escalation behavior but move the payload toward live API-derived identifiers.
+Current intended flow:
+- generate TCs from the current AC draft in session
+- reuse existing saved TCs when available
+- support feedback-based regeneration
+- support manual edits
+- support explicit TC re-review after manual edits
+- support Slack DM and channel sharing
+- publish Trello full summary and positive cases to Sheets
+
+Important:
+- do not generate or review TCs only from stale `card.desc` when a newer AC draft exists
+- avoid duplicate Trello comments on retry after partial publish failure
 
 ## AI QA Rules
+
+Keep TC-first verification as the default path.
 
 Use automation for:
 - navigation
 - locators
-- shared repeated flows
+- repeated flows
 
-Use codebase + wiki + KB + carrier registries for:
+Use codebase, KB, wiki, request registry, and carrier registries for:
 - expectation building
-- request/response reasoning
+- request and response reasoning
 - setup guidance
 
 Do not reduce AI QA back to AC-only execution.
-Keep TC-first verification as the default path.
 
-Current important AI QA features already in place:
-- parsed TC execution
-- preflight setup macros
-- learned locator memory
-- automation-locator-first lookup
-- expectation matching against captured logs
+## Automation Rules
+
+Current intended flow:
+- `① Write Automation Code`
+- `② Run Automation & Post to Slack`
+- `③ Generate Documentation`
+- `🐛 Bug Reporter`
+
+Current automation matching behavior:
+- detect existing-vs-new feature areas
+- prefer updating existing MCSL automation coverage
+- use `feature_detector` and `find_pom`
+
+## Toggle Rules
+
+Toggle flow is MCSL-specific and already has live-state support.
+
+Current behavior:
+- detect toggle details from card text and comments
+- derive default store and app URL from MCSL knowledge
+- capture live `store_uuid`, `account_uuid`, and toggle state from app or API responses
+- compute enabled vs missing toggles
+- notify Ashok or developer through Slack
+- poll replies and unblock QA when confirmed
+
+If touching toggle flow:
+- keep live state as the source of truth when available
+- do not regress to store-name-only logic
+
+## Optional Dependency Shims
+
+This repo includes compatibility shims for local test and import stability:
+- `streamlit.py`
+- `langchain_anthropic/`
+- `langchain_core/`
+- `chromadb/`
+- `langchain_chroma/`
+- `langchain_ollama/`
+- `langchain_text_splitters/`
+
+Do not remove them casually without checking test coverage and local `.venv` behavior.
 
 ## Docs To Keep Updated
 
-When changing workflow or architecture, update:
-- `README.md`
-- `CLAUDE.md`
-- `docs/FEDEX_FLOW_PARITY_NOTES.md`
-- `docs/MCSL_PLATFORM_ADAPTATION_PLAN.md`
+When workflow changes materially, update:
+- [README.md](/Users/madan/Documents/MCSLDomainExpert/README.md:1)
+- [CLAUDE.md](/Users/madan/Documents/MCSLDomainExpert/CLAUDE.md:1)
+- [docs/FEDEX_FLOW_PARITY_NOTES.md](/Users/madan/Documents/MCSLDomainExpert/docs/FEDEX_FLOW_PARITY_NOTES.md:1)
+- [docs/MCSL_PLATFORM_ADAPTATION_PLAN.md](/Users/madan/Documents/MCSLDomainExpert/docs/MCSL_PLATFORM_ADAPTATION_PLAN.md:1)
 
-Update carrier docs too when carrier knowledge changes:
-- `docs/MCSL_CARRIER_SUPPORT_REGISTRY.md`
-- `docs/MCSL_CARRIER_CAPABILITY_MATRIX.md`
-- `docs/MCSL_CARRIER_REQUEST_REGISTRY.md`
+When carrier reasoning changes, also update:
+- [docs/MCSL_CARRIER_KNOWLEDGE_RESEARCH.md](/Users/madan/Documents/MCSLDomainExpert/docs/MCSL_CARRIER_KNOWLEDGE_RESEARCH.md:1)
+- [docs/MCSL_CARRIER_SUPPORT_REGISTRY.md](/Users/madan/Documents/MCSLDomainExpert/docs/MCSL_CARRIER_SUPPORT_REGISTRY.md:1)
+- [docs/MCSL_CARRIER_CAPABILITY_MATRIX.md](/Users/madan/Documents/MCSLDomainExpert/docs/MCSL_CARRIER_CAPABILITY_MATRIX.md:1)
+- [docs/MCSL_CARRIER_REQUEST_REGISTRY.md](/Users/madan/Documents/MCSLDomainExpert/docs/MCSL_CARRIER_REQUEST_REGISTRY.md:1)
 
-If KB-facing docs change, remember they may need re-ingest later.
+## Useful Commands
 
-## Runtime Notes
-
-- Python env is pinned via `.python-version`
-- Streamlit entrypoint is `pipeline_dashboard.py`
-- automation repo path comes from `config.MCSL_AUTOMATION_REPO_PATH`
-- many flows depend on Trello, Slack, Sheets, and local automation code being configured
-
-## Known Next Improvement
-
-Most important open MCSL-specific gap:
-- derive toggle/store identity from live MCSL APIs:
-  - `storeUUID`
-  - `accountUUID`
-  - `/toggles` status
-
-That should be implemented before calling the toggle flow fully complete.
+```bash
+python3 -m py_compile pipeline_dashboard.py pipeline/card_processor.py
+pytest -q tests/test_dashboard.py::test_dash01_scaffold
+pytest -q tests/test_dashboard.py::test_ui10b_validate_ac_matches_fedex_auto_analysis_flow
+pytest -q tests/test_dashboard.py::test_ui10c_generate_tc_uses_current_ac_and_avoids_duplicate_trello_publish
+pytest -q tests/test_toggle_state.py
+```
