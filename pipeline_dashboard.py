@@ -2352,30 +2352,7 @@ def main() -> None:
                             st.session_state["release_analysis"] = None
 
                             if release_stage == "validate_ac" and cards:
-                                _release_name = st.session_state["rqa_release"]
-                                st.info(
-                                    f"Loaded {len(cards)} cards from **{selected_list_name}** — running Domain Expert validation…"
-                                )
-                                _progress = st.progress(0)
-                                for _idx, _card in enumerate(cards):
-                                    st.session_state[f"validation_{_card.id}"] = validate_card(
-                                        card_name=_card.name,
-                                        card_desc=_card.desc or "",
-                                        acceptance_criteria=st.session_state.get(f"ac_suggestion_{_card.id}", _card.desc or ""),
-                                    )
-                                    st.session_state[f"diagnosis_{_card.id}"] = diagnose_customer_ticket(
-                                        _card_request_payload(_card)
-                                    )
-                                    _progress.progress((_idx + 1) / len(cards))
-                                _progress.empty()
-                                _ra_cards = [
-                                    RASummary(card_id=c.id, card_name=c.name, card_desc=c.desc or "")
-                                    for c in cards
-                                ]
-                                st.session_state["release_analysis"] = analyse_release(
-                                    release_name=_release_name,
-                                    cards=_ra_cards,
-                                )
+                                st.session_state["release_analysis"] = None
                             st.rerun()
                         except Exception as _load_err:
                             st.error(f"Failed to load cards: {_load_err}")
