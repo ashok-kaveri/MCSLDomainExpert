@@ -1,26 +1,19 @@
 # MCSL Carrier Knowledge Research
 
-## What I verified
+This file describes the current carrier-knowledge inputs used by the MCSL expert. It is not a future backlog.
 
-The current MCSL expert already has strong source coverage:
+## Current Source Coverage
 
+The repo already has broad MCSL source coverage from:
 - `docs/kb_snapshots/`
-  - PluginHive KB articles for setup, troubleshooting, carriers, packaging, checkout rates, customs, alcohol/signature, etc.
 - `docs/tc_snapshots/mcsl-regression-master-sheet.md`
-  - broad regression coverage for orders, products, packaging, carriers, fulfillment, tracking, automation, and Shopify sync
 - local wiki at `~/Documents/mcsl-wiki/wiki`
-  - product, support, architecture, modules, operations, zendesk summaries
-- automation repo at `~/Documents/mcsl-test-automation`
-  - Playwright tests, auth, test data, automation rules, and carrier envs
-- code search across:
-  - backend/shared source
-  - frontend/client source
-  - automation source
+- local automation repo at `~/Documents/mcsl-test-automation`
+- code search across backend, frontend, and automation source
 
-## Carrier coverage confirmed from automation envs
+## Carrier Coverage Confirmed
 
-The automation repo currently has carrier env files for:
-
+The automation repo currently includes carrier env coverage for:
 - Amazon Shipping
 - Australia Post
 - Blue Dart
@@ -30,119 +23,60 @@ The automation repo currently has carrier env files for:
 - USPS
 - USPS Stamps
 
-There are also KB/doc references for additional carriers and carrier families such as:
-
+The broader documentation set also includes support material for additional carriers and carrier families such as:
 - DHL
 - Canada Post
 - Purolator
 - PostNord
-- EasyPost / USPS via EasyPost
+- EasyPost or USPS via EasyPost
 
-## Important product rule
+## Operating Rule For Card Interpretation
 
-Cards should be interpreted using this rule:
-
-- if the card clearly mentions a carrier, treat it as `carrier-specific`
-- if the card does not mention a carrier, treat it as `generic`
-- generic cards should use a stable default carrier path for execution planning unless the retrieved context says the scenario must be carrier-neutral or multi-carrier
+Cards should be interpreted with this rule:
+- if the card clearly mentions a carrier, treat it as carrier-specific
+- if the card does not mention a carrier, treat it as generic
+- generic cards should use a stable default carrier path unless retrieved context says the scenario must stay carrier-neutral or explicitly multi-carrier
 
 This matters because many MCSL features are shared platform behaviors:
-
-- order import / order grid
-- label generation flow
+- order import and order grid
+- label generation
 - packaging settings
-- Shopify fulfillment / tracking sync
-- rate automation / request log
+- Shopify fulfillment and tracking sync
+- rate automation and request log
 - product settings
-- generic settings flows
+- general settings flows
 
-## MCSL navigation facts confirmed
+## Navigation Facts
 
-The MCSL app is easier to model than FedEx because many flows are shared:
+Common navigation patterns in MCSL:
+- top tabs such as `ORDERS`, `LABELS`, and `PICKUP`
+- hamburger-menu flows such as `Products`, `Carriers`, and `General Settings`
+- Shopify admin verification for orders, fulfillment, tracking, and products when needed
 
-- top tabs:
-  - `ORDERS`
-  - `LABELS`
-  - `PICKUP`
-  - also `MANIFEST`, `TRACKING` in verifier navigation
-- hamburger-menu flows:
-  - `Products`
-  - `Carriers`
-  - `General Settings`
-  - shipping / packaging / automation areas
-- Shopify admin verification:
-  - Orders page for fulfillment/tracking verification
-  - Products page for product creation / verification
+## Current Implementation
 
-## Current implementation changes made
+Shared carrier knowledge is implemented in:
+- [pipeline/carrier_knowledge.py](/Users/madan/Documents/MCSLDomainExpert/pipeline/carrier_knowledge.py:1)
 
-I added a shared carrier knowledge layer in:
-
-- `pipeline/carrier_knowledge.py`
-
-It now provides:
-
+It provides:
 - supported carrier profiles
 - alias matching
 - carrier-specific vs generic card detection
 - default generic-carrier guidance
 - carrier env path resolution for automation order creation
 
-It is now used by:
+It is currently used by:
+- [pipeline/user_story_writer.py](/Users/madan/Documents/MCSLDomainExpert/pipeline/user_story_writer.py:1)
+- [pipeline/domain_validator.py](/Users/madan/Documents/MCSLDomainExpert/pipeline/domain_validator.py:1)
+- [pipeline/smart_ac_verifier.py](/Users/madan/Documents/MCSLDomainExpert/pipeline/smart_ac_verifier.py:1)
+- [pipeline/order_creator.py](/Users/madan/Documents/MCSLDomainExpert/pipeline/order_creator.py:1)
+- [pipeline/handoff_docs.py](/Users/madan/Documents/MCSLDomainExpert/pipeline/handoff_docs.py:1)
 
-- `pipeline/user_story_writer.py`
-- `pipeline/domain_validator.py`
-- `pipeline/smart_ac_verifier.py`
-- `pipeline/order_creator.py`
-- `pipeline/handoff_docs.py`
+## Practical Conclusion
 
-## What still needs to happen
+The repo already has the right source inputs for multi-carrier reasoning.
 
-The next high-value work is ingestion and retrieval quality, not dashboard wiring.
-
-We should add:
-
-1. a carrier capability matrix document
-- carrier name
-- internal code
-- available env
-- main setup path
-- known special services
-- request-log / label-log verification notes
-
-2. wiki/source ingestion refresh discipline
-- re-run ingest regularly for:
-  - `kb_articles`
-  - `wiki`
-  - `automation`
-  - backend
-  - frontend
-
-3. ticket diagnosis guidance
-- for each new customer issue, classify likely cause as:
-  - generic platform
-  - carrier setup
-  - packaging/data
-  - Shopify sync
-  - request/label API issue
-  - code defect
-
-4. QA planning guidance
-- if card has carrier info:
-  - use that carrier first
-- if card is generic:
-  - use generic flow and stable default carrier path unless knowledge says otherwise
-
-## Practical conclusion
-
-The MCSL expert does not need a different tab structure first.
-It needs a better source-of-truth layer for multi-carrier knowledge.
-
-The repo already has the right source inputs.
-The important work now is to make carrier knowledge explicit and consistently used across:
-
-- user story writing
-- domain validation
-- AI QA planning
-- issue diagnosis
-- handoff documentation
+The important rule for future agents is:
+- keep carrier knowledge explicit
+- keep it reused across validation, QA planning, automation setup, issue diagnosis, and handoff output
+- do not downgrade the repo back to single-carrier assumptions just to mirror FedEx

@@ -180,7 +180,10 @@ def search(query: str, k: int = 5) -> list[Document]:
         err_str = str(e).lower()
         if "does not exist" in err_str or "collection" in err_str or "no documents" in err_str:
             return []
-        logger.exception("Vector store search failed for query: %r", query)
+        if "failed to connect to ollama" in err_str or "connection error" in err_str:
+            logger.warning("Vector store search skipped for query %r: %s", query, e)
+        else:
+            logger.warning("Vector store search failed for query %r: %s", query, e)
         raise
 
 
@@ -228,8 +231,20 @@ def search_filtered(
         err_str = str(e).lower()
         if "does not exist" in err_str or "collection" in err_str or "no documents" in err_str:
             return []
-        logger.exception(
-            "Filtered vector store search failed for query: %r (source_type=%r, category=%r)",
-            query, source_type, category,
-        )
+        if "failed to connect to ollama" in err_str or "connection error" in err_str:
+            logger.warning(
+                "Filtered vector store search skipped for query %r (source_type=%r, category=%r): %s",
+                query,
+                source_type,
+                category,
+                e,
+            )
+        else:
+            logger.warning(
+                "Filtered vector store search failed for query %r (source_type=%r, category=%r): %s",
+                query,
+                source_type,
+                category,
+                e,
+            )
         raise

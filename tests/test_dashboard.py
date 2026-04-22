@@ -347,6 +347,49 @@ def test_ui10_automation_step_uses_ai_qa_first_then_optional_live_explore():
     assert 'Generate Playwright automation for this card' not in src
 
 
+def test_ui10b_validate_ac_matches_fedex_auto_analysis_flow():
+    import pipeline_dashboard as pd
+    import inspect
+
+    src = inspect.getsource(pd)
+    assert "Loaded " in src and "running Domain Expert validation" in src
+    assert "Analyze loaded cards" not in src
+    assert "Release Intelligence —" in src
+    assert "Cross-Card Conflicts" in src
+    assert "Suggested Test Order" in src
+    assert "### Step 1: Card Requirements" in src
+    assert "#### AI Suggested User Story & AC" in src
+    assert "🤖 Generate User Story & AC" in src
+    assert "Diagnosis is being generated from the loaded card context." in src
+    assert 'with st.spinner("Running validation, diagnosis, and release intelligence…"):\n                            _analyze_loaded_cards' not in src
+    assert "st.session_state[f\"validation_{card.id}\"] = validate_card(" in src
+    assert "research_context=_research" in src
+    assert "_fresh_card = trello.get_card(card.id) if trello else card" in src
+
+
+def test_ui10c_generate_tc_uses_current_ac_and_avoids_duplicate_trello_publish():
+    import pipeline_dashboard as pd
+    import inspect
+
+    src = inspect.getsource(pd)
+    assert "_current_ac_for_tc" in src
+    assert "generate_test_cases(card, ac_text=_current_ac_for_tc)" in src
+    assert "regenerate_with_feedback(" in src and "ac_text=_current_ac_for_tc" in src
+    assert "_tc_trello_saved_key = f\"tc_trello_saved_{card.id}\"" in src
+    assert "if not st.session_state.get(_tc_trello_saved_key, False):" in src
+    assert "Re-review TCs" in src
+    assert "reviewing edited test cases" not in src.lower() or "Reviewing edited test cases…" in src
+    assert "card_desc=_current_ac_for_tc or card.desc or \"\"" in src
+    assert "total TCs" in src
+    assert "positive → Sheet" in src
+    assert "negative → Trello comment only" in src
+    assert "edge → Trello comment only" in src
+    assert "tc_dm_sent_" in src
+    assert "tc_ch_sent_" in src
+    assert "Send again" in src
+    assert "Post again" in src
+
+
 def test_ui11_generate_documentation_stage_present():
     import pipeline_dashboard as pd
     import inspect

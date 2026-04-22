@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import logging
 import re
+from functools import lru_cache
 
 from pipeline.carrier_knowledge import carrier_research_context, detect_carrier_scope
 from pipeline.carrier_request_registry import resolve_carrier_request_profile
@@ -208,7 +209,8 @@ def _code_research(query: str) -> str:
         return ""
 
 
-def build_requirement_research_context(request_text: str, *, max_docs: int = 4) -> str:
+@lru_cache(maxsize=128)
+def _build_requirement_research_context_cached(request_text: str, max_docs: int) -> str:
     """Return a richer research block for story/AC generation."""
     query = _clean_text(request_text, 500)
     if not query:
@@ -241,3 +243,7 @@ def build_requirement_research_context(request_text: str, *, max_docs: int = 4) 
         "Use this to add constraints, edge cases, prerequisites, and open questions without inventing unsupported rules.\n\n"
         + "\n\n".join(parts)
     )
+
+
+def build_requirement_research_context(request_text: str, *, max_docs: int = 4) -> str:
+    return _build_requirement_research_context_cached(request_text or "", max_docs)

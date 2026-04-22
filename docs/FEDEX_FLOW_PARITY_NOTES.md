@@ -1,118 +1,98 @@
 # FedEx Flow Parity Notes
 
-## Current FedEx workflow traced
+This document tracks workflow parity only. It is not a claim that MCSL and FedEx share the same domain logic.
 
-FedEx no longer uses one combined `Release QA` tab. The current QA flow is split into:
+Comparison repo:
+- `../Fed-Ex-automation/FedexDomainExpert`
 
-1. `User Story`
-- requirement research first
-- generate user story + AC
-- Trello board-first card creation flow
+MCSL source of truth:
+- [pipeline_dashboard.py](/Users/madan/Documents/MCSLDomainExpert/pipeline_dashboard.py:1)
 
-2. `Move Cards`
-- board-first bulk move flow
+## What Parity Means
 
-3. `🧾 Validate AC`
-- load board/list/release
-- inspect card requirements
-- detect toggle prerequisites
-- generate or review AI AC
-- save/comment/skip/share AC
-- run domain validation
-- apply fixes and re-validate
+Parity means:
+- similar QA stage order
+- similar release-state progression
+- similar user affordances around generation, validation, publish, review, automation, docs, and sign-off
 
-4. `🧪 Generate TC`
-- reuse loaded release context
-- generate and review test cases
-- regenerate with feedback
-- publish test cases
-- share TCs through Slack
+Parity does not mean:
+- copying FedEx navigation
+- copying FedEx carrier assumptions
+- replacing MCSL rules with FedEx logic
 
-5. `🤖 AI QA Verifier`
-- run AI QA using generated test cases
-- handle `qa_needed`
-- review failed findings
-- notify devs
-- ask domain expert
-- final approve and save
+## Current Parity Status By Stage
 
-6. `⚙️ Generate Automation Script`
-- write automation code
-- bulk approve remaining cards when needed
-- run automation and post results to Slack
+### Validate AC
 
-7. `History`
-- show approved pipeline runs
+MCSL now follows the FedEx-style sequence:
+- `Load Cards`
+- auto-run validation, diagnosis, and release analysis
+- show `Release Intelligence`
+- show `Step 1: Card Requirements`
+- show `AI Suggested User Story & AC`
+- show `Domain Validation`
+- allow fix and revalidate
 
-8. `Sign Off`
-- compose sign-off from approved cards
+Important MCSL-specific difference:
+- toggle flow is richer and app-state-aware, and should stay different from FedEx
 
-9. `Handoff Docs`
-- release handoff/support docs
+### Generate TC
 
-## Current MCSL parity status
+MCSL supports the same core flow shape:
+- generate test cases
+- review and regenerate with feedback
+- manual edit and re-review
+- Slack share
+- publish to Trello and Sheets
+- duplicate review before sheet write
 
-MCSL now matches the FedEx split-tab QA structure:
+Current correctness behavior:
+- generation uses the current AC draft, not only stale Trello description
+- existing saved TCs are also reviewed against the current AC draft
+- partial publish retry should not duplicate the Trello summary comment
 
-- `🧾 Validate AC`
-- `🧪 Generate TC`
-- `🤖 AI QA Verifier`
-- `⚙️ Generate Automation Script`
+Remaining differences:
+- mostly wording and layout
+- not a major flow gap
 
-And already includes these parity items:
+### AI QA Verifier
 
-- board-first Trello flow
-- requirement-research-backed User Story flow
-- AC action panel:
-  - save to Trello description
-  - post Trello comment
-  - skip keep existing
-  - Slack DM
-  - Slack channel
-- domain validation
-- apply-fixes and re-validate
-- TC generation/review/regenerate
-- TC Slack DM/channel
-- TC-first AI QA
-- `qa_needed` rerun flow
-- failed-finding selection and notify-dev path
-- ask-domain-expert step
-- final approval with sheet tab handling and duplicate review
-- publish test cases
-- write automation
-- release-level run-tests and Slack post
-- handoff docs tab
+MCSL already has the main FedEx-style AI QA flow:
+- TC-first execution
+- reruns and `qa_needed`
+- failed-finding review
+- ask-domain-expert
+- final approval and save
 
-## MCSL-specific differences that are intentional
+Intentional MCSL difference:
+- execution and reasoning use MCSL automation, MCSL request expectations, and MCSL carrier knowledge
 
-MCSL should not copy FedEx navigation.
+### Generate Automation Script
 
-Different by design:
-- Shopify embedded app navigation
-- multi-carrier domain model
-- carrier-aware request/response expectations
-- Shopify verification flows
-- automation-backed MCSL setup and log handling
+MCSL now includes the main FedEx-style automation stages:
+- `① Write Automation Code`
+- `② Run Automation & Post to Slack`
+- `③ Generate Documentation`
+- `🐛 Bug Reporter`
 
-## Toggle parity status
+Additional parity already present:
+- existing-vs-new feature detection
+- `find_pom`-style automation matching
+- per-card run breakdown
+- failed-test detail
+- richer generation summary
 
-MCSL toggle flow is now close to FedEx in orchestration:
-- detect toggles
-- notify Ashok
-- poll replies
-- escalate to dev
-- unblock QA after confirmation
+## Intentional MCSL Differences That Must Stay
 
-But there is one MCSL-specific next step still open:
-- stop relying mainly on store name / store URL
-- capture `storeUUID` and `accountUUID` from MCSL APIs
-- capture `/toggles` API status to know if a toggle is already enabled
+- Shopify embedded-app navigation
+- multi-carrier expectation logic
+- MCSL toggle and store-state capture
+- MCSL automation repo structure
+- MCSL request and log verification rules
 
-That is the main remaining toggle-flow enhancement.
+## Remaining Work
 
-## Remaining parity work
-
-- keep polishing wording/layout where QA expects exact FedEx phrasing
-- implement UUID-based toggle context for MCSL
-- continue checking `Generate Automation Script` for any missed FedEx behavior
-- continue real-card testing to patch any missing UI variant in AI QA execution
+Most remaining parity work is now:
+- wording and layout cleanup where QA wants closer FedEx familiarity
+- live Trello, Slack, and app validation of the newest flows
+- small parity fixes only when they improve MCSL workflow without damaging MCSL-specific behavior

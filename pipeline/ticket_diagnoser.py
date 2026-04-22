@@ -3,15 +3,70 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import re
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
 from dataclasses import dataclass, field
 from textwrap import dedent
 
 import config
+try:
+    from langchain_core.messages import HumanMessage
+except Exception:
+    class HumanMessage:  # type: ignore[override]
+        def __init__(self, content: str):
+            self.content = content
 
-from pipeline.carrier_knowledge import carrier_prompt_block, carrier_research_context
+from pipeline.carrier_knowledge import (
+    carrier_prompt_block,
+    carrier_research_context,
+    detect_carrier_scope,
+)
 
 logger = logging.getLogger(__name__)
+_LLM_TIMEOUT_SECONDS = int(os.environ.get("MCSL_LLM_TIMEOUT_SECONDS", "90"))
+
+
+def _normalise_model_text(content) -> str:
+    """Flatten Anthropic/LangChain response content into plain text."""
+    if isinstance(content, str):
+        return content.strip()
+    if isinstance(content, list):
+        parts: list[str] = []
+        for item in content:
+            if isinstance(item, str):
+                parts.append(item)
+            elif isinstance(item, dict):
+                text = item.get("text")
+                if isinstance(text, str):
+                    parts.append(text)
+                elif isinstance(item.get("content"), str):
+                    parts.append(item["content"])
+            else:
+                parts.append(str(item))
+        return "\n".join(part for part in parts if part).strip()
+    if isinstance(content, dict):
+        text = content.get("text")
+        if isinstance(text, str):
+            return text.strip()
+        inner = content.get("content")
+        if isinstance(inner, str):
+            return inner.strip()
+    return str(content).strip()
+
+
+def _invoke_llm_with_timeout(llm, prompt: str, *, timeout_seconds: int | None = None):
+    timeout = timeout_seconds or _LLM_TIMEOUT_SECONDS
+    executor = ThreadPoolExecutor(max_workers=1)
+    future = executor.submit(llm.invoke, [HumanMessage(content=prompt)])
+    try:
+        return future.result(timeout=timeout)
+    except FuturesTimeoutError as exc:
+        raise TimeoutError(
+            f"Claude diagnosis request timed out after {timeout}s."
+        ) from exc
+    finally:
+        executor.shutdown(wait=False, cancel_futures=True)
 
 
 @dataclass
@@ -153,7 +208,7 @@ def _extract_first_json_object(raw: str) -> dict:
 def _basic_fallback_diagnosis(ticket_text: str, *, error: str = "") -> TicketDiagnosis:
     text = (ticket_text or "").lower()
     issue_type = "feature" if any(token in text for token in ("enhancement", "feature", "support for", "allow ")) else "bug"
-    carrier_scope = "carrier_specific" if carrier_prompt_block(ticket_text).startswith("Carrier scope: CARRIER-SPECIFIC") else "generic"
+    carrier_scope = "carrier_specific" if detect_carrier_scope(ticket_text).scope == "carrier_specific" else "generic"
     likely_root_cause = "request_or_label_api" if any(token in text for token in ("customs", "label", "api", "request")) else "generic_platform"
     evidence: list[str] = []
     next_checks: list[str] = []
@@ -190,6 +245,8 @@ def _basic_fallback_diagnosis(ticket_text: str, *, error: str = "") -> TicketDia
 
 
 def diagnose_ticket(ticket_text: str, model: str | None = None) -> TicketDiagnosis:
+    detected_scope = detect_carrier_scope(ticket_text)
+
     if not getattr(config, "ANTHROPIC_API_KEY", ""):
         return TicketDiagnosis(error="ANTHROPIC_API_KEY not configured")
 
@@ -230,7 +287,6 @@ def diagnose_ticket(ticket_text: str, model: str | None = None) -> TicketDiagnos
     )
     try:
         from langchain_anthropic import ChatAnthropic
-        from langchain_core.messages import HumanMessage
 
         llm = ChatAnthropic(
             model=model or config.CLAUDE_SONNET_MODEL,
@@ -238,36 +294,51 @@ def diagnose_ticket(ticket_text: str, model: str | None = None) -> TicketDiagnos
             temperature=0,
             max_tokens=1200,
         )
-        response = llm.invoke([HumanMessage(content=prompt)])
-        raw = response.content.strip()
+        response = _invoke_llm_with_timeout(llm, prompt)
+        raw = _normalise_model_text(getattr(response, "content", response))
         try:
             data = _extract_first_json_object(raw)
         except Exception:
             try:
-                repair_resp = llm.invoke([
-                    HumanMessage(content=DIAGNOSIS_JSON_REPAIR_PROMPT.format(raw_output=raw[:4000]))
-                ])
-                data = _extract_first_json_object(repair_resp.content.strip())
+                repair_resp = _invoke_llm_with_timeout(
+                    llm,
+                    DIAGNOSIS_JSON_REPAIR_PROMPT.format(raw_output=raw[:4000]),
+                )
+                data = _extract_first_json_object(
+                    _normalise_model_text(getattr(repair_resp, "content", repair_resp))
+                )
             except Exception:
-                retry_resp = llm.invoke([
-                    HumanMessage(
-                        content=DIAGNOSIS_MINIMAL_RETRY_PROMPT.format(
-                            ticket_text=(ticket_text or "(empty ticket)")[:1600],
-                            carrier_scope=carrier_prompt_block(ticket_text),
-                        )
-                    )
-                ])
-                data = _extract_first_json_object(retry_resp.content.strip())
+                retry_resp = _invoke_llm_with_timeout(
+                    llm,
+                    DIAGNOSIS_MINIMAL_RETRY_PROMPT.format(
+                        ticket_text=(ticket_text or "(empty ticket)")[:1600],
+                        carrier_scope=carrier_prompt_block(ticket_text),
+                    ),
+                )
+                data = _extract_first_json_object(
+                    _normalise_model_text(getattr(retry_resp, "content", retry_resp))
+                )
         return TicketDiagnosis(
             issue_type=data.get("issue_type", "unknown"),
-            carrier_scope=data.get("carrier_scope", "generic"),
+            carrier_scope=(
+                "carrier_specific"
+                if detected_scope.scope == "carrier_specific"
+                else data.get("carrier_scope", "generic")
+            ),
             likely_root_cause=data.get("likely_root_cause", "unclear"),
             confidence=data.get("confidence", "low"),
             summary=data.get("summary", ""),
-            evidence=data.get("evidence", []) or [],
+            evidence=[
+                *(
+                    [f"Detected carrier context from card text/comments: {', '.join(profile.canonical_name for profile in detected_scope.carriers)}."]
+                    if detected_scope.scope == "carrier_specific"
+                    else []
+                ),
+                *(data.get("evidence", []) or []),
+            ],
             next_checks=data.get("next_checks", []) or [],
             suggested_test_strategy=data.get("suggested_test_strategy", []) or [],
         )
     except Exception as exc:
-        logger.error("diagnose_ticket failed: %s", exc)
+        logger.warning("diagnose_ticket fallback used: %s", exc)
         return _basic_fallback_diagnosis(ticket_text, error=f"Diagnosis failed: {exc}")

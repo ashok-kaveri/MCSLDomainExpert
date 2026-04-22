@@ -8,6 +8,7 @@ import logging
 import re
 import threading
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 from typing import Any
 
@@ -1347,6 +1348,64 @@ def _card_request_payload(card: Any) -> str:
     )
 
 
+def _analyse_loaded_card(card: Any) -> tuple[str, ValidationReport, dict | None]:
+    validation = validate_card(
+        card_name=card.name,
+        card_desc=card.desc or "",
+        acceptance_criteria=card.desc or "",
+    )
+    diagnosis = _normalise_card_diagnosis(
+        card,
+        diagnose_customer_ticket(_card_request_payload(card)),
+    )
+    return getattr(card, "id", ""), validation, diagnosis
+
+
+def _normalise_card_diagnosis(card: Any, diagnosis: dict | None) -> dict | None:
+    """Apply deterministic carrier-scope correction from visible card evidence."""
+    if not diagnosis:
+        return diagnosis
+    try:
+        from pipeline.carrier_knowledge import detect_carrier_scope
+
+        _summary = diagnosis.get("summary", "") if isinstance(diagnosis, dict) else ""
+        _evidence = "\n".join(diagnosis.get("evidence", []) or []) if isinstance(diagnosis, dict) else ""
+        _next_checks = "\n".join(diagnosis.get("next_checks", []) or []) if isinstance(diagnosis, dict) else ""
+        _strategy = "\n".join(diagnosis.get("suggested_test_strategy", []) or []) if isinstance(diagnosis, dict) else ""
+        combined_text = "\n".join(
+            part for part in [
+                getattr(card, "name", "") or "",
+                getattr(card, "desc", "") or "",
+                "\n".join(getattr(card, "comments", []) or []),
+                " ".join(getattr(card, "labels", []) or []),
+                _summary,
+                _evidence,
+                _next_checks,
+                _strategy,
+            ] if part.strip()
+        )
+        scope = detect_carrier_scope(
+            getattr(card, "name", "") or "",
+            getattr(card, "desc", "") or "",
+            "\n".join(getattr(card, "comments", []) or []),
+            " ".join(getattr(card, "labels", []) or []),
+            _summary,
+            _evidence,
+            _next_checks,
+            _strategy,
+        )
+        diagnosis = dict(diagnosis)
+        if scope.scope == "carrier_specific":
+            diagnosis["carrier_scope"] = "carrier_specific"
+            diagnosis["detected_carriers"] = [profile.canonical_name for profile in scope.carriers]
+        combined_lower = combined_text.lower()
+        if any(token in combined_lower for token in ("customs", "label", "api", "request builder", "request builders", "carrier request", "request payload")):
+            diagnosis["likely_root_cause"] = "request_or_label_api"
+        return diagnosis
+    except Exception:
+        return diagnosis
+
+
 def _analyze_loaded_cards(cards: list[Any], release_name: str) -> None:
     """Run expensive card/release analysis on demand instead of during load."""
     for card in cards:
@@ -1369,12 +1428,20 @@ def _analyze_loaded_cards(cards: list[Any], release_name: str) -> None:
                 test_cases_markdown=_existing_tc_markdown,
             )
         if f"diagnosis_{card.id}" not in st.session_state:
-            st.session_state[f"diagnosis_{card.id}"] = diagnose_customer_ticket(
-                _card_request_payload(card)
+            st.session_state[f"diagnosis_{card.id}"] = _normalise_card_diagnosis(
+                card,
+                diagnose_customer_ticket(_card_request_payload(card)),
             )
 
     ra_cards = [
-        RASummary(card_id=c.id, card_name=c.name, card_desc=c.desc or "")
+        RASummary(
+            card_id=c.id,
+            card_name=c.name,
+            card_desc=c.desc or "",
+            card_comments=getattr(c, "comments", []) or [],
+            card_labels=getattr(c, "labels", []) or [],
+            card_checklists=getattr(c, "checklists", []) or [],
+        )
         for c in cards
     ]
     st.session_state["release_analysis"] = analyse_release(
@@ -1932,11 +1999,17 @@ def main() -> None:
                 if st.button("⬇️ Use selected Trello card", key=f"use_us_card_{_selected_us_card.id}"):
                     st.session_state["us_request_input"] = _card_payload
                     st.session_state["us_card_title"] = _selected_us_card.name
-                    st.session_state[f"us_diag_{_selected_us_card.id}"] = diagnose_customer_ticket(_card_payload)
+                    st.session_state[f"us_diag_{_selected_us_card.id}"] = _normalise_card_diagnosis(
+                        _selected_us_card,
+                        diagnose_customer_ticket(_card_payload),
+                    )
                     st.rerun()
                 _us_diag = st.session_state.get(f"us_diag_{_selected_us_card.id}")
                 if not _us_diag:
-                    _us_diag = diagnose_customer_ticket(_card_payload)
+                    _us_diag = _normalise_card_diagnosis(
+                        _selected_us_card,
+                        diagnose_customer_ticket(_card_payload),
+                    )
                     st.session_state[f"us_diag_{_selected_us_card.id}"] = _us_diag
                 if _us_diag and not _us_diag.get("error"):
                     st.caption(
@@ -2351,19 +2424,30 @@ def main() -> None:
                                     f"Loaded {len(cards)} cards from **{selected_list_name}** — running Domain Expert validation…"
                                 )
                                 _progress = st.progress(0)
-                                for _idx, _card in enumerate(cards):
-                                    st.session_state[f"validation_{_card.id}"] = validate_card(
-                                        card_name=_card.name,
-                                        card_desc=_card.desc or "",
-                                        acceptance_criteria=st.session_state.get(f"ac_suggestion_{_card.id}", _card.desc or ""),
-                                    )
-                                    st.session_state[f"diagnosis_{_card.id}"] = diagnose_customer_ticket(
-                                        _card_request_payload(_card)
-                                    )
-                                    _progress.progress((_idx + 1) / len(cards))
+                                _cards_by_id = {getattr(_card, "id", ""): _card for _card in cards}
+                                _max_workers = min(4, max(1, len(cards)))
+                                with ThreadPoolExecutor(max_workers=_max_workers) as _executor:
+                                    _futures = [_executor.submit(_analyse_loaded_card, _card) for _card in cards]
+                                    for _idx, _future in enumerate(as_completed(_futures)):
+                                        _card_id, _validation, _diagnosis = _future.result()
+                                        if _card_id:
+                                            st.session_state[f"validation_{_card_id}"] = _validation
+                                            _card_obj = _cards_by_id.get(_card_id)
+                                            st.session_state[f"diagnosis_{_card_id}"] = (
+                                                _normalise_card_diagnosis(_card_obj, _diagnosis)
+                                                if _card_obj is not None else _diagnosis
+                                            )
+                                        _progress.progress((_idx + 1) / len(cards))
                                 _progress.empty()
                                 _ra_cards = [
-                                    RASummary(card_id=c.id, card_name=c.name, card_desc=c.desc or "")
+                                    RASummary(
+                                        card_id=c.id,
+                                        card_name=c.name,
+                                        card_desc=c.desc or "",
+                                        card_comments=getattr(c, "comments", []) or [],
+                                        card_labels=getattr(c, "labels", []) or [],
+                                        card_checklists=getattr(c, "checklists", []) or [],
+                                    )
                                     for c in cards
                                 ]
                                 st.session_state["release_analysis"] = analyse_release(
@@ -2424,62 +2508,58 @@ def main() -> None:
 
             st.divider()
 
-            if show_ac_stage and cards:
+            if show_ac_stage:
                 _pending_validation = sum(1 for c in cards if f"validation_{c.id}" not in st.session_state)
                 _pending_diagnosis = sum(1 for c in cards if f"diagnosis_{c.id}" not in st.session_state)
-                _analysis_missing = _pending_diagnosis or not st.session_state.get("release_analysis")
-                if _pending_diagnosis and st.session_state.get("release_analysis") and not _pending_validation:
-                    _analyze_label = "🩺 Generate diagnosis"
-                elif _pending_diagnosis and st.session_state.get("release_analysis"):
-                    _analyze_label = "🔍 Complete analysis"
-                else:
-                    _analyze_label = "🔍 Analyze loaded cards"
-                _ana_col1, _ana_col2 = st.columns([1, 3])
-                with _ana_col1:
-                    if st.button(
-                        _analyze_label,
-                        key="rqa_analyze_loaded_cards",
-                        use_container_width=True,
-                        type="primary" if _analysis_missing else "secondary",
-                    ):
-                        with st.spinner("Running validation, diagnosis, and release intelligence…"):
-                            _analyze_loaded_cards(cards, st.session_state.get("rqa_release", ""))
-                        st.success("Loaded cards analyzed.")
-                        st.rerun()
-                with _ana_col2:
-                    if _analysis_missing:
-                        if _pending_diagnosis and st.session_state.get("release_analysis") and not _pending_validation:
-                            st.caption(f"Pending analysis: diagnosis {_pending_diagnosis} card(s) · release intelligence ready")
-                        else:
-                            st.caption(
-                                f"Pending analysis: diagnosis {_pending_diagnosis} card(s) · "
-                                f"release intelligence {'missing' if not st.session_state.get('release_analysis') else 'ready'}"
-                            )
-                    else:
-                        st.caption("Loaded cards already have validation, diagnosis, and release intelligence.")
-
-            if show_ac_stage:
                 # ── Release Intelligence ─────────────────────────────────────
                 ra: ReleaseAnalysis | None = st.session_state.get("release_analysis")
                 if ra and not ra.error:
-                    risk_emoji = {"LOW": "🟢", "MEDIUM": "🟡", "HIGH": "🔴"}.get(ra.risk_level, "⚪")
-                    with st.expander(f"{risk_emoji} Release Intelligence — {ra.risk_level} RISK: {ra.risk_summary}", expanded=False):
-                        if ra.conflicts:
-                            st.markdown("**⚡ Conflicts:**")
-                            for conflict in ra.conflicts:
-                                st.markdown(f"- **{conflict.get('area','')}**: {conflict.get('description','')} ({', '.join(conflict.get('cards',[]))})")
-                        if ra.ordering:
-                            st.markdown("**📋 Suggested Test Order:**")
-                            for item in ra.ordering:
-                                st.markdown(f"{item.get('position','')}. **{item.get('card_name','')}** — {item.get('reason','')}")
-                        if ra.coverage_gaps:
-                            st.markdown("**🔍 Coverage Gaps:**")
-                            for gap in ra.coverage_gaps:
-                                st.markdown(f"- {gap}")
+                    _risk_emoji = {"LOW": "🟢", "MEDIUM": "🟡", "HIGH": "🔴"}.get(ra.risk_level, "⚪")
+                    with st.expander(
+                        f"{_risk_emoji} Release Intelligence — {ra.risk_level} RISK · {ra.risk_summary}",
+                        expanded=True,
+                    ):
                         if ra.kb_context_summary:
-                            st.caption(f"KB: {ra.kb_context_summary}")
+                            st.info(f"📚 KB Context: {ra.kb_context_summary}")
+
+                        _ra_left, _ra_right = st.columns(2)
+                        with _ra_left:
+                            if ra.conflicts:
+                                st.markdown("##### ⚠️ Cross-Card Conflicts")
+                                for _conflict in ra.conflicts:
+                                    _cards_involved = " & ".join(_conflict.get("cards", []))
+                                    _area = _conflict.get("area", "")
+                                    _desc = _conflict.get("description", "")
+                                    st.warning(f"**{_cards_involved}** — *{_area}*\n\n{_desc}")
+                            else:
+                                st.success("✅ No cross-card conflicts detected")
+
+                            if ra.coverage_gaps:
+                                st.markdown("##### 🕳️ Coverage Gaps")
+                                for _gap in ra.coverage_gaps:
+                                    st.caption(f"• {_gap}")
+
+                        with _ra_right:
+                            if ra.ordering:
+                                st.markdown("##### 📋 Suggested Test Order")
+                                for _item in ra.ordering:
+                                    _pos = _item.get("position", "")
+                                    _card_name = _item.get("card_name", "")
+                                    _reason = _item.get("reason", "")
+                                    st.markdown(f"**{_pos}.** {_card_name}")
+                                    st.caption(f"   ↳ {_reason}")
+
+                        if getattr(ra, "sources", None):
+                            st.caption(
+                                "KB sources: " + " · ".join(
+                                    f"[link]({source})" if str(source).startswith("http") else str(source)
+                                    for source in (ra.sources or [])[:4]
+                                )
+                            )
+                elif _pending_validation or _pending_diagnosis:
+                    st.info("Release analysis is still loading from the most recent card load.")
                 else:
-                    st.caption("Run `Analyze loaded cards` to generate release intelligence.")
+                    st.info("Release analysis is using fallback reasoning for the loaded cards.")
 
             st.divider()
 
@@ -2489,7 +2569,12 @@ def main() -> None:
             for card in cards:
                 _card_run = _get_card_run(getattr(card, "id", ""))
                 _vr: ValidationReport | None = st.session_state.get(f"validation_{card.id}")
-                _diag: dict | None = st.session_state.get(f"diagnosis_{card.id}")
+                _diag: dict | None = _normalise_card_diagnosis(
+                    card,
+                    st.session_state.get(f"diagnosis_{card.id}"),
+                )
+                if _diag is not None:
+                    st.session_state[f"diagnosis_{card.id}"] = _diag
                 _existing_tc_comment = _find_existing_tc_comment(card)
                 _existing_tc_markdown = _load_existing_tc_markdown(card)
                 _has_existing_ac = bool(card.desc and len(card.desc.strip()) > 30)
@@ -2689,7 +2774,7 @@ def main() -> None:
 
                             _live_col1, _live_col2 = st.columns([1, 3])
                             with _live_col1:
-                                if st.button("🔄 Refresh Live Toggle State", key=f"refresh_toggle_live_{card.id}", use_container_width=True):
+                                if st.button("🔎 Check Toggle Status & Get UUIDs", key=f"refresh_toggle_live_{card.id}", use_container_width=True):
                                     with st.spinner("Reading store context and toggle status from the app…"):
                                         _capture = capture_store_and_toggle_state(_app_url.strip())
                                     if _capture.error:
@@ -2715,7 +2800,7 @@ def main() -> None:
                                     elif _detected_toggles:
                                         st.success("✅ All detected toggles are already enabled for this store.")
                                 else:
-                                    st.caption("Refresh live state to capture Store UUID, Account UUID, and current toggle status.")
+                                    st.caption("Checks whether the detected toggle is enabled and captures Store UUID plus Account UUID from the live app.")
 
                             _toggles_to_request = (
                                 [_toggle_by_label.get(label, label) for label in _live_summary.get("missing", [])]
@@ -2992,9 +3077,19 @@ def main() -> None:
                                     st.session_state[_ac_comment_key] = False
                                     st.session_state[_ac_saved_key] = False
                                     st.session_state[_ac_skip_key] = False
+                                    st.session_state[f"validation_{card.id}"] = validate_card(
+                                        card_name=card.name,
+                                        card_desc=card.desc or "",
+                                        acceptance_criteria=_generated,
+                                        research_context=_research,
+                                    )
+                                    _vr = st.session_state.get(f"validation_{card.id}")
                                     _update_pipeline_run(
                                         card,
                                         ac_generated_at=datetime.now().isoformat(timespec="seconds"),
+                                        ac_validated_at=datetime.now().isoformat(timespec="seconds"),
+                                        ac_validation_status=getattr(_vr, "overall_status", ""),
+                                        ac_validation_summary=getattr(_vr, "summary", ""),
                                         ac_preview=_generated[:1200],
                                     )
                                     st.rerun()
@@ -3003,98 +3098,123 @@ def main() -> None:
 
                         # ── Step 2: Domain validation ───────────────────────────
                         if _vr:
+                            _badge_color = {"PASS": "green", "NEEDS_REVIEW": "orange", "FAIL": "red"}.get(_vr.overall_status, "gray")
+                            st.markdown(f"**Domain Validation:** :{_badge_color}[{_vr.overall_status}] — {_vr.summary}")
                             if _vr.error:
-                                st.warning(f"Validation error: {_vr.error}")
-                            else:
-                                _badge_color = {"PASS": "green", "NEEDS_REVIEW": "orange", "FAIL": "red"}.get(_vr.overall_status, "gray")
-                                st.markdown(f"**Domain Validation:** :{_badge_color}[{_vr.overall_status}] — {_vr.summary}")
-                                if _vr.requirement_gaps or _vr.ac_gaps or _vr.accuracy_issues:
-                                    with st.expander("🔍 Validation Issues", expanded=_vr.overall_status == "FAIL"):
-                                        if _vr.requirement_gaps:
-                                            st.markdown("**Requirement Gaps:**")
-                                            for g in _vr.requirement_gaps:
-                                                st.markdown(f"- {g}")
-                                        if _vr.ac_gaps:
-                                            st.markdown("**AC Gaps:**")
-                                            for g in _vr.ac_gaps:
-                                                st.markdown(f"- {g}")
-                                        if _vr.accuracy_issues:
-                                            st.markdown("**Accuracy Issues:**")
-                                            for g in _vr.accuracy_issues:
-                                                st.markdown(f"- {g}")
-                                if _vr.suggestions:
-                                    with st.expander("💡 Suggestions"):
-                                        for s in _vr.suggestions:
-                                            st.markdown(f"- {s}")
-                                if _vr.kb_insights:
-                                    st.caption(f"KB Insights: {_vr.kb_insights}")
-                                _has_val_issues = any([
-                                    _vr.requirement_gaps,
-                                    _vr.ac_gaps,
-                                    _vr.accuracy_issues,
-                                    _vr.suggestions,
-                                ])
-                                if _has_val_issues:
-                                    _fix_col, _reval_col = st.columns(2)
-                                    with _fix_col:
-                                        if st.button("🛠️ Apply Fixes to AC", key=f"apply_val_fix_{card.id}", use_container_width=True):
-                                            try:
-                                                _current_ac = st.session_state.get(f"ac_suggestion_{card.id}") or (card.desc or "")
-                                                _fixed_ac = apply_validation_fixes(
-                                                    card_name=card.name,
-                                                    acceptance_criteria=_current_ac,
-                                                    report=_vr,
-                                                )
-                                                st.session_state[f"ac_suggestion_{card.id}"] = _fixed_ac
-                                                st.session_state[f"ac_saved_{card.id}"] = False
-                                                st.session_state[f"ac_review_{card.id}"] = review_acceptance_criteria(
-                                                    raw_request=card.name,
-                                                    ac_markdown=_fixed_ac,
-                                                )
-                                                _update_pipeline_run(
-                                                    card,
-                                                    ac_updated_at=datetime.now().isoformat(timespec="seconds"),
-                                                    ac_preview=_fixed_ac[:1200],
-                                                )
-                                                st.success("Validation fixes applied to the AC draft.")
-                                                st.rerun()
-                                            except Exception as _fix_err:
-                                                st.error(f"Could not apply validation fixes: {_fix_err}")
-                                    with _reval_col:
-                                        if st.button("🔄 Re-validate after fix", key=f"reval_{card.id}", use_container_width=True):
-                                            try:
-                                                _recheck_ac = st.session_state.get(f"ac_suggestion_{card.id}") or (card.desc or "")
-                                                st.session_state[f"validation_{card.id}"] = validate_card(
-                                                    card_name=card.name,
-                                                    card_desc=card.desc or "",
-                                                    acceptance_criteria=_recheck_ac,
-                                                )
-                                                _reval_report = st.session_state.get(f"validation_{card.id}")
-                                                _update_pipeline_run(
-                                                    card,
-                                                    ac_validated_at=datetime.now().isoformat(timespec="seconds"),
-                                                    ac_validation_status=getattr(_reval_report, "overall_status", ""),
-                                                    ac_validation_summary=getattr(_reval_report, "summary", ""),
-                                                )
-                                                st.success("Validation re-run completed.")
-                                                st.rerun()
-                                            except Exception as _reval_err:
-                                                st.error(f"Re-validation failed: {_reval_err}")
+                                st.info(f"Validation used fallback reasoning: {_vr.error}")
+                            if _vr.requirement_gaps or _vr.ac_gaps or _vr.accuracy_issues:
+                                with st.expander("🔍 Validation Issues", expanded=_vr.overall_status == "FAIL"):
+                                    if _vr.requirement_gaps:
+                                        st.markdown("**Requirement Gaps:**")
+                                        for g in _vr.requirement_gaps:
+                                            st.markdown(f"- {g}")
+                                    if _vr.ac_gaps:
+                                        st.markdown("**AC Gaps:**")
+                                        for g in _vr.ac_gaps:
+                                            st.markdown(f"- {g}")
+                                    if _vr.accuracy_issues:
+                                        st.markdown("**Accuracy Issues:**")
+                                        for g in _vr.accuracy_issues:
+                                            st.markdown(f"- {g}")
+                            if _vr.suggestions:
+                                with st.expander("💡 Suggestions"):
+                                    for s in _vr.suggestions:
+                                        st.markdown(f"- {s}")
+                            if _vr.kb_insights:
+                                st.caption(f"KB Insights: {_vr.kb_insights}")
+                            _has_val_issues = any([
+                                _vr.requirement_gaps,
+                                _vr.ac_gaps,
+                                _vr.accuracy_issues,
+                                _vr.suggestions,
+                            ])
+                            if _has_val_issues:
+                                _fix_col, _reval_col = st.columns(2)
+                                with _fix_col:
+                                    if st.button("🛠️ Apply Fixes to AC", key=f"apply_val_fix_{card.id}", use_container_width=True):
+                                        try:
+                                            _current_ac = st.session_state.get(f"ac_suggestion_{card.id}") or (card.desc or "")
+                                            _research = st.session_state.get(f"ac_research_{card.id}", "")
+                                            _fixed_ac = apply_validation_fixes(
+                                                card_name=card.name,
+                                                acceptance_criteria=_current_ac,
+                                                report=_vr,
+                                                research_context=_research,
+                                            )
+                                            st.session_state[f"ac_suggestion_{card.id}"] = _fixed_ac
+                                            st.session_state[f"ac_saved_{card.id}"] = False
+                                            st.session_state[f"ac_review_{card.id}"] = review_acceptance_criteria(
+                                                raw_request=card.name,
+                                                ac_markdown=_fixed_ac,
+                                            )
+                                            _update_pipeline_run(
+                                                card,
+                                                ac_updated_at=datetime.now().isoformat(timespec="seconds"),
+                                                ac_preview=_fixed_ac[:1200],
+                                            )
+                                            st.success("Validation fixes applied to the AC draft.")
+                                            st.rerun()
+                                        except Exception as _fix_err:
+                                            st.error(f"Could not apply validation fixes: {_fix_err}")
+                                with _reval_col:
+                                    if st.button("🔄 Re-validate after fix", key=f"reval_{card.id}", use_container_width=True):
+                                        try:
+                                            _fresh_card = trello.get_card(card.id) if trello else card
+                                            if _fresh_card is not None:
+                                                card.desc = getattr(_fresh_card, "desc", card.desc)
+                                            _recheck_ac = st.session_state.get(f"ac_suggestion_{card.id}") or (card.desc or "")
+                                            _research = st.session_state.get(f"ac_research_{card.id}", "")
+                                            st.session_state[f"validation_{card.id}"] = validate_card(
+                                                card_name=card.name,
+                                                card_desc=card.desc or "",
+                                                acceptance_criteria=_recheck_ac,
+                                                research_context=_research,
+                                            )
+                                            _reval_report = st.session_state.get(f"validation_{card.id}")
+                                            _update_pipeline_run(
+                                                card,
+                                                ac_validated_at=datetime.now().isoformat(timespec="seconds"),
+                                                ac_validation_status=getattr(_reval_report, "overall_status", ""),
+                                                ac_validation_summary=getattr(_reval_report, "summary", ""),
+                                            )
+                                            st.success("Validation re-run completed.")
+                                            st.rerun()
+                                        except Exception as _reval_err:
+                                            st.error(f"Re-validation failed: {_reval_err}")
                         else:
                             st.info("Validation not yet run. Reload the release in `Validate AC`, or re-validate after AC changes.")
 
                         if _diag:
-                            if _diag.get("error"):
-                                st.warning(f"Diagnosis error: {_diag['error']}")
-                            else:
-                                _carrier_scope = (_diag.get("carrier_scope") or "generic").replace("_", " ")
-                                _root_cause = (_diag.get("likely_root_cause") or "unclear").replace("_", " ")
-                                st.markdown(
-                                    f"**Card Diagnosis:** `{_diag.get('issue_type', 'unknown')}`"
-                                    f" · carrier scope `{_carrier_scope}`"
-                                    f" · likely root cause `{_root_cause}`"
-                                    f" · confidence `{_diag.get('confidence', 'low')}`"
+                            from pipeline.carrier_knowledge import detect_carrier_scope
+
+                            _effective_scope = detect_carrier_scope(
+                                getattr(card, "name", "") or "",
+                                getattr(card, "desc", "") or "",
+                                "\n".join(getattr(card, "comments", []) or []),
+                                " ".join(getattr(card, "labels", []) or []),
+                                _diag.get("summary", "") or "",
+                                "\n".join(_diag.get("evidence", []) or []),
+                            )
+                            _carrier_scope_value = (
+                                "carrier_specific"
+                                if _effective_scope.scope == "carrier_specific"
+                                else (_diag.get("carrier_scope") or "generic")
+                            )
+                            _carrier_scope = _carrier_scope_value.replace("_", " ")
+                            _root_cause = (_diag.get("likely_root_cause") or "unclear").replace("_", " ")
+                            st.markdown(
+                                f"**Card Diagnosis:** `{_diag.get('issue_type', 'unknown')}`"
+                                f" · carrier scope `{_carrier_scope}`"
+                                f" · likely root cause `{_root_cause}`"
+                                f" · confidence `{_diag.get('confidence', 'low')}`"
+                            )
+                            if _effective_scope.scope == "carrier_specific":
+                                st.caption(
+                                    "Detected carriers from card evidence: "
+                                    + ", ".join(profile.canonical_name for profile in _effective_scope.carriers)
                                 )
+                            if _diag.get("error"):
+                                st.info(f"Diagnosis used fallback reasoning: {_diag['error']}")
                             if _diag.get("summary"):
                                 st.caption(_diag["summary"])
                             _evidence = _diag.get("evidence") or []
@@ -3115,7 +3235,7 @@ def main() -> None:
                                         for _item in _strategy:
                                             st.markdown(f"- {_item}")
                         elif show_ac_stage:
-                            st.caption("Diagnosis not yet run. Use `Analyze loaded cards` above to generate it.")
+                            st.caption("Diagnosis is being generated from the loaded card context.")
 
                         st.divider()
 
@@ -3131,10 +3251,17 @@ def main() -> None:
                         _tc_review_key = f"tc_review_{card.id}"
                         _tc_feedback_key = f"feedback_{card.id}"
                         _tc_saved_key = f"tc_saved_{card.id}"
+                        _tc_trello_saved_key = f"tc_trello_saved_{card.id}"
                         if _tc_saved_key not in st.session_state and _is_card_tc_published(card.id):
                             st.session_state[_tc_saved_key] = True
+                        if _tc_trello_saved_key not in st.session_state and _is_card_tc_published(card.id):
+                            st.session_state[_tc_trello_saved_key] = True
                         _existing_tcs_in_store = tc_store.get(card.id, "") or _existing_tc_markdown
                         _vr = st.session_state.get(f"validation_{card.id}")
+                        _current_ac_for_tc = (
+                            st.session_state.get(f"ac_suggestion_{card.id}", "").strip()
+                            or (card.desc or "").strip()
+                        )
 
                         if _vr and not getattr(_vr, "error", "") and getattr(_vr, "overall_status", "") == "FAIL":
                             st.warning(
@@ -3145,7 +3272,7 @@ def main() -> None:
                         if _existing_tcs_in_store and _tc_review_key not in st.session_state:
                             st.session_state[_tc_review_key] = review_test_cases(
                                 card_name=card.name,
-                                card_desc=card.desc or "",
+                                card_desc=_current_ac_for_tc or card.desc or "",
                                 test_cases_markdown=_existing_tcs_in_store,
                             )
 
@@ -3167,7 +3294,7 @@ def main() -> None:
 
                         if _gen_tc_clicked or (_force_regen and not _has_tc):
                             with st.spinner("Generating test cases…"):
-                                generated_tcs = generate_test_cases(card)
+                                generated_tcs = generate_test_cases(card, ac_text=_current_ac_for_tc)
                                 st.session_state[_tc_key] = generated_tcs
                                 st.session_state[_tc_review_key] = get_last_tc_review()
                                 tc_store[card.id] = generated_tcs
@@ -3176,10 +3303,11 @@ def main() -> None:
                                 st.rerun()
 
                         if st.session_state.get(_tc_key, "").strip():
-                            st.markdown(st.session_state[_tc_key])
+                            _previous_tc_text = st.session_state.get(_tc_key, "")
+                            st.markdown(_previous_tc_text)
                             _edited_tc = st.text_area(
                                 "Test Cases (editable)",
-                                value=st.session_state[_tc_key],
+                                value=_previous_tc_text,
                                 height=300,
                                 key=f"tc_editor_stage_{card.id}",
                             )
@@ -3187,12 +3315,26 @@ def main() -> None:
                             tc_store[card.id] = _edited_tc
                             st.session_state["rqa_test_cases"] = tc_store
                             _tc_review = st.session_state.get(_tc_review_key) or {}
+                            _tc_edited = _edited_tc.strip() != _previous_tc_text.strip()
                             if _tc_review.get("needs_revision"):
                                 with st.expander("TC review corrections", expanded=False):
                                     for _item in (_tc_review.get("issues", []) or []):
                                         st.markdown(f"- {_item}")
                                     for _item in (_tc_review.get("rewrite_instructions", []) or []):
                                         st.markdown(f"- {_item}")
+                            if _tc_edited:
+                                _rr_col1, _rr_col2 = st.columns([3, 1])
+                                with _rr_col1:
+                                    st.info("Test cases were edited manually. Re-review before publishing to refresh QA guidance.")
+                                with _rr_col2:
+                                    if st.button("🔍 Re-review TCs", key=f"rereview_tc_stage_{card.id}", use_container_width=True):
+                                        with st.spinner("Reviewing edited test cases…"):
+                                            st.session_state[_tc_review_key] = review_test_cases(
+                                                card_name=card.name,
+                                                card_desc=_current_ac_for_tc or card.desc or "",
+                                                test_cases_markdown=_edited_tc,
+                                            )
+                                        st.rerun()
 
                             _fb_col1, _fb_col2 = st.columns([4, 1])
                             with _fb_col1:
@@ -3205,7 +3347,12 @@ def main() -> None:
                                 st.markdown("<br>", unsafe_allow_html=True)
                                 if st.button("🔄 Regenerate", key=f"regen_feedback_stage_{card.id}", use_container_width=True):
                                     if feedback.strip():
-                                        updated_tcs = regenerate_with_feedback(card, _edited_tc, feedback)
+                                        updated_tcs = regenerate_with_feedback(
+                                            card,
+                                            _edited_tc,
+                                            feedback,
+                                            ac_text=_current_ac_for_tc,
+                                        )
                                         st.session_state[_tc_key] = updated_tcs
                                         st.session_state[_tc_review_key] = get_last_tc_review()
                                         tc_store[card.id] = updated_tcs
@@ -3223,6 +3370,23 @@ def main() -> None:
                                     st.session_state[f"show_ch_tc_{card.id}"] = True
                                     st.session_state[f"show_dm_tc_{card.id}"] = False
 
+                            _tc_dm_sent_key = f"tc_dm_sent_{card.id}"
+                            _tc_ch_sent_key = f"tc_ch_sent_{card.id}"
+                            if st.session_state.get(_tc_dm_sent_key):
+                                st.success("✅ Test cases sent via Slack DM!")
+                                if st.button("📨 Send again", key=f"tc_dm_resend_stage_{card.id}"):
+                                    st.session_state[_tc_dm_sent_key] = False
+                                    st.session_state[f"show_dm_tc_{card.id}"] = True
+                                    st.session_state[f"show_ch_tc_{card.id}"] = False
+                                    st.rerun()
+                            elif st.session_state.get(_tc_ch_sent_key):
+                                st.success("✅ Test cases posted to Slack channel!")
+                                if st.button("📢 Post again", key=f"tc_ch_resend_stage_{card.id}"):
+                                    st.session_state[_tc_ch_sent_key] = False
+                                    st.session_state[f"show_ch_tc_{card.id}"] = True
+                                    st.session_state[f"show_dm_tc_{card.id}"] = False
+                                    st.rerun()
+
                             if st.session_state.get(f"show_ch_tc_{card.id}"):
                                 st.markdown("##### 📢 Post Test Cases to Slack Channel")
                                 _render_slack_channel_panel(
@@ -3232,6 +3396,10 @@ def main() -> None:
                                     content_label="Test Cases",
                                     card_url=getattr(card, "url", ""),
                                 )
+                                if st.button("Mark TC channel post sent", key=f"tc_ch_mark_sent_{card.id}", use_container_width=True):
+                                    st.session_state[_tc_ch_sent_key] = True
+                                    st.session_state[f"show_ch_tc_{card.id}"] = False
+                                    st.rerun()
                             if st.session_state.get(f"show_dm_tc_{card.id}"):
                                 st.markdown("##### 📨 Send Test Cases via Slack DM")
                                 _render_slack_dm_panel(
@@ -3240,6 +3408,10 @@ def main() -> None:
                                     content_text=_edited_tc,
                                     content_label="Test Cases",
                                 )
+                                if st.button("Mark TC DM sent", key=f"tc_dm_mark_sent_{card.id}", use_container_width=True):
+                                    st.session_state[_tc_dm_sent_key] = True
+                                    st.session_state[f"show_dm_tc_{card.id}"] = False
+                                    st.rerun()
 
                             st.divider()
                             _step_header("4", "Publish Test Cases")
@@ -3247,6 +3419,14 @@ def main() -> None:
                                 st.success("✅ Test cases already published to Trello and Google Sheets for this card.")
                             else:
                                 st.caption("Publishing writes a QA summary comment to Trello and positive test-case rows to Google Sheets.")
+
+                            _tc_total, _tc_pos, _tc_neg, _tc_edge = _summarise_tc_counts(card.name, _edited_tc)
+                            st.caption(
+                                f"📊 **{_tc_total} total TCs** · "
+                                f"✅ {_tc_pos} positive → Sheet · "
+                                f"❌ {_tc_neg} negative → Trello comment only · "
+                                f"⚠️ {_tc_edge} edge → Trello comment only"
+                            )
 
                             _publish_tab_key = f"tc_publish_tab_{card.id}"
                             _publish_dup_key = f"tc_publish_dups_{card.id}"
@@ -3356,13 +3536,15 @@ def main() -> None:
                                     _skipped_duplicates = 0
 
                                     try:
-                                        write_test_cases_to_card(
-                                            card_id=card.id,
-                                            test_cases=_edited_tc,
-                                            trello=trello,
-                                            release=st.session_state.get("rqa_release", ""),
-                                            card_name=card.name,
-                                        )
+                                        if not st.session_state.get(_tc_trello_saved_key, False):
+                                            write_test_cases_to_card(
+                                                card_id=card.id,
+                                                test_cases=_edited_tc,
+                                                trello=trello,
+                                                release=st.session_state.get("rqa_release", ""),
+                                                card_name=card.name,
+                                            )
+                                        st.session_state[_tc_trello_saved_key] = True
                                     except Exception as _trello_err:
                                         _publish_errors.append(f"Trello: {_trello_err}")
 
@@ -3386,6 +3568,8 @@ def main() -> None:
                                     if _publish_errors:
                                         for _err in _publish_errors:
                                             st.warning(f"⚠️ {_err}")
+                                        if st.session_state.get(_tc_trello_saved_key, False):
+                                            st.info("Trello comment is already saved. Retry will only need to complete Google Sheets.")
                                     else:
                                         st.session_state[_tc_saved_key] = True
                                         _update_pipeline_run(

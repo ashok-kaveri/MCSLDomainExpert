@@ -9,7 +9,9 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import re
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
 from dataclasses import dataclass, field
 from textwrap import dedent
 
@@ -28,6 +30,66 @@ logger = logging.getLogger(__name__)
 _CONTEXT_LIMIT = 3800
 _CARD_DESC_LIMIT = 2500
 _AC_LIMIT = 2500
+_LLM_TIMEOUT_SECONDS = int(os.environ.get("MCSL_LLM_TIMEOUT_SECONDS", "90"))
+
+
+def _compact_text(text: str, limit: int) -> str:
+    cleaned_lines = [re.sub(r"\s+", " ", line).strip() for line in (text or "").splitlines()]
+    compact = "\n".join(line for line in cleaned_lines if line)
+    return compact[:limit]
+
+
+def _compact_context(text: str, limit: int) -> str:
+    if not (text or "").strip():
+        return ""
+    seen: set[str] = set()
+    kept: list[str] = []
+    total = 0
+    for raw_line in text.splitlines():
+        line = re.sub(r"\s+", " ", raw_line).strip()
+        if not line:
+            continue
+        key = line.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        next_total = total + len(line) + (1 if kept else 0)
+        if next_total > limit:
+            remaining = limit - total
+            if remaining > 40:
+                kept.append(line[:remaining])
+            break
+        kept.append(line)
+        total = next_total
+    return "\n".join(kept)
+
+
+def _normalise_model_text(content) -> str:
+    """Flatten Anthropic/LangChain response content into plain text."""
+    if isinstance(content, str):
+        return content.strip()
+    if isinstance(content, list):
+        parts: list[str] = []
+        for item in content:
+            if isinstance(item, str):
+                parts.append(item)
+            elif isinstance(item, dict):
+                text = item.get("text")
+                if isinstance(text, str):
+                    parts.append(text)
+                elif isinstance(item.get("content"), str):
+                    parts.append(item["content"])
+            else:
+                parts.append(str(item))
+        return "\n".join(part for part in parts if part).strip()
+    if isinstance(content, dict):
+        text = content.get("text")
+        if isinstance(text, str):
+            return text.strip()
+        inner = content.get("content")
+        if isinstance(inner, str):
+            return inner.strip()
+    return str(content).strip()
 
 
 def _make_llm():
@@ -39,6 +101,20 @@ def _make_llm():
         temperature=0,
         max_tokens=900,
     )
+
+
+def _invoke_llm_with_timeout(llm, prompt: str, *, timeout_seconds: int | None = None):
+    timeout = timeout_seconds or _LLM_TIMEOUT_SECONDS
+    executor = ThreadPoolExecutor(max_workers=1)
+    future = executor.submit(llm.invoke, [HumanMessage(content=prompt)])
+    try:
+        return future.result(timeout=timeout)
+    except FuturesTimeoutError as exc:
+        raise TimeoutError(
+            f"Claude validator request timed out after {timeout}s."
+        ) from exc
+    finally:
+        executor.shutdown(wait=False, cancel_futures=True)
 
 
 def _basic_fallback_validation(
@@ -103,6 +179,12 @@ def _basic_fallback_validation(
 def _extract_first_json_object(raw: str) -> dict:
     """Best-effort extraction of the first JSON object from model output."""
     cleaned = re.sub(r"```(?:json)?", "", raw or "").strip().rstrip("`").strip()
+    cleaned = (
+        cleaned.replace("“", '"')
+        .replace("”", '"')
+        .replace("’", "'")
+        .replace("‘", "'")
+    )
     if not cleaned:
         raise ValueError("Empty validator response")
 
@@ -130,7 +212,13 @@ def _extract_first_json_object(raw: str) -> dict:
         elif ch == "}":
             depth -= 1
             if depth == 0:
-                return json.loads(cleaned[start : idx + 1])
+                candidate = cleaned[start : idx + 1]
+                try:
+                    return json.loads(candidate)
+                except json.JSONDecodeError:
+                    # Common model mistake: trailing commas before } or ]
+                    repaired = re.sub(r",(\s*[}\]])", r"\1", candidate)
+                    return json.loads(repaired)
     raise ValueError("No complete JSON object found in validator response")
 
 
@@ -145,6 +233,35 @@ def _normalise_validation_error(exc: Exception) -> str:
     if "Empty validator response" in text:
         return "Validator returned an empty response; fallback validation was used."
     return f"Validation fallback used: {text}"
+
+
+def _parse_failure_validation_report(
+    raw_output: str,
+    *,
+    error: str,
+    sources: list[str] | None = None,
+) -> "ValidationReport":
+    """Return a FedEx-style degraded validation result on parse failure."""
+    summary = (raw_output or "").strip()
+    summary = re.sub(r"```(?:json)?", "", summary).strip().rstrip("`").strip()
+    if summary:
+        try:
+            parsed = json.loads(summary)
+            if isinstance(parsed, dict):
+                summary = str(parsed.get("summary") or "").strip()
+        except Exception:
+            match = re.search(r'"summary"\s*:\s*"([^"]+)"', summary)
+            if match:
+                summary = match.group(1).strip()
+    if not summary:
+        summary = "Validation could not be parsed reliably. Review the card manually."
+    return ValidationReport(
+        overall_status="NEEDS_REVIEW",
+        summary=summary[:300],
+        kb_insights="Validation output could not be parsed into structured JSON; manual review is recommended.",
+        sources=sources or [],
+        error=error,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -298,6 +415,7 @@ def validate_card(
     card_name: str,
     card_desc: str,
     acceptance_criteria: str = "",
+    research_context: str = "",
 ) -> ValidationReport:
     """Validate a Trello card's requirements against the MCSL knowledge base.
 
@@ -329,34 +447,62 @@ def validate_card(
         logger.warning("Carrier research context failed during validate_card: %s", exc)
 
     # 3. Build prompt and call Claude
+    merged_context = context or ""
+    if research_context:
+        merged_context = (
+            f"Requirement research context:\n{research_context[:_CONTEXT_LIMIT]}\n\n---\n\n{merged_context}"
+            if merged_context
+            else research_context[:_CONTEXT_LIMIT]
+        )
+
+    _compact_card_name = _compact_text(card_name or "", 240) or "(untitled card)"
+    _compact_card_desc = _compact_text(card_desc or "(no description)", _CARD_DESC_LIMIT)
+    _compact_ac = _compact_text(acceptance_criteria or "(not yet written)", _AC_LIMIT)
+    _compact_context_text = _compact_context(merged_context or "No context retrieved.", _CONTEXT_LIMIT)
+    _compact_carrier_scope = _compact_context(
+        carrier_prompt_block(card_name, card_desc, acceptance_criteria),
+        1200,
+    ) or "Generic MCSL platform scope."
+
     prompt = VALIDATION_PROMPT.format(
-        context=(context or "No context retrieved.")[:_CONTEXT_LIMIT],
-        carrier_scope=carrier_prompt_block(card_name, card_desc, acceptance_criteria),
-        card_name=card_name,
-        card_desc=(card_desc or "(no description)")[:_CARD_DESC_LIMIT],
-        acceptance_criteria=(acceptance_criteria or "(not yet written)")[:_AC_LIMIT],
+        context=_compact_context_text,
+        carrier_scope=_compact_carrier_scope,
+        card_name=_compact_card_name,
+        card_desc=_compact_card_desc,
+        acceptance_criteria=_compact_ac,
     )
     try:
         llm = _make_llm()
-        response = llm.invoke([HumanMessage(content=prompt)])
-        raw = response.content.strip()
+        response = _invoke_llm_with_timeout(llm, prompt)
+        raw = _normalise_model_text(getattr(response, "content", response))
         try:
             data = _extract_first_json_object(raw)
         except Exception:
             try:
-                repair_resp = llm.invoke([
-                    HumanMessage(content=VALIDATION_JSON_REPAIR_PROMPT.format(raw_output=raw[:4000]))
-                ])
-                data = _extract_first_json_object(repair_resp.content.strip())
+                repair_resp = _invoke_llm_with_timeout(
+                    llm,
+                    VALIDATION_JSON_REPAIR_PROMPT.format(raw_output=raw[:4000]),
+                )
+                repaired_raw = _normalise_model_text(getattr(repair_resp, "content", repair_resp))
+                data = _extract_first_json_object(repaired_raw)
             except Exception:
                 minimal_prompt = VALIDATION_MINIMAL_RETRY_PROMPT.format(
-                    card_name=card_name,
-                    card_desc=(card_desc or "(no description)")[:1200],
-                    acceptance_criteria=(acceptance_criteria or "(not yet written)")[:1200],
-                    carrier_scope=carrier_prompt_block(card_name, card_desc, acceptance_criteria),
+                    card_name=_compact_card_name,
+                    card_desc=_compact_text(card_desc or "(no description)", 1200),
+                    acceptance_criteria=_compact_text(acceptance_criteria or "(not yet written)", 1200),
+                    carrier_scope=_compact_context(_compact_carrier_scope, 500),
                 )
-                retry_resp = llm.invoke([HumanMessage(content=minimal_prompt)])
-                data = _extract_first_json_object(retry_resp.content.strip())
+                try:
+                    retry_resp = _invoke_llm_with_timeout(llm, minimal_prompt)
+                    retry_raw = _normalise_model_text(getattr(retry_resp, "content", retry_resp))
+                    data = _extract_first_json_object(retry_raw)
+                except Exception as parse_exc:
+                    logger.info("validate_card parse fallback used for '%s': %s", card_name, parse_exc)
+                    return _parse_failure_validation_report(
+                        raw,
+                        error=_normalise_validation_error(parse_exc),
+                        sources=sources,
+                    )
         return ValidationReport(
             overall_status=data.get("overall_status", "NEEDS_REVIEW"),
             summary=data.get("summary", ""),
@@ -382,6 +528,7 @@ def apply_validation_fixes(
     card_name: str,
     acceptance_criteria: str,
     report: ValidationReport,
+    research_context: str = "",
 ) -> str:
     """Rewrite AC using the validation report findings."""
     if not getattr(config, "ANTHROPIC_API_KEY", ""):
@@ -396,6 +543,8 @@ def apply_validation_fixes(
         accuracy_issues="\n".join(f"- {item}" for item in (report.accuracy_issues or [])) or "- None",
         suggestions="\n".join(f"- {item}" for item in (report.suggestions or [])) or "- None",
     )
+    if research_context:
+        prompt = f"{prompt}\n\nRequirement Research Context:\n{research_context[:2000]}"
     from langchain_anthropic import ChatAnthropic
 
     llm = ChatAnthropic(
@@ -404,5 +553,5 @@ def apply_validation_fixes(
         temperature=0,
         max_tokens=2048,
     )
-    response = llm.invoke([HumanMessage(content=prompt)])
-    return response.content.strip() or acceptance_criteria
+    response = _invoke_llm_with_timeout(llm, prompt)
+    return _normalise_model_text(getattr(response, "content", response)) or acceptance_criteria

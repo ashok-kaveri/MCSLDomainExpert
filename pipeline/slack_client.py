@@ -17,6 +17,21 @@ logger = logging.getLogger(__name__)
 SLACK_API = "https://slack.com/api"
 
 
+def _humanize_slack_history_error(error_code: str) -> str:
+    if error_code == "missing_scope":
+        return (
+            "Slack bot token is missing permission to read DM replies. "
+            "Add the required history scope for the conversation type, usually `im:history` "
+            "(and sometimes `mpim:history`, `channels:history`, or `groups:history`), "
+            "then reinstall/update the Slack app."
+        )
+    if error_code == "invalid_auth":
+        return "Slack bot token is invalid or expired. Check `SLACK_BOT_TOKEN`."
+    if error_code == "channel_not_found":
+        return "Slack could not find the DM/channel used for the toggle notification."
+    return error_code or "unknown"
+
+
 class SlackClient:
     def __init__(self, token=None, channel=None, webhook_url=None):
         self.webhook_url = webhook_url if webhook_url is not None else os.getenv("SLACK_WEBHOOK_URL", "")
@@ -563,7 +578,10 @@ def check_toggle_reply(channel_id: str, after_ts: str) -> dict:
         resp.raise_for_status()
         data = resp.json()
         if not data.get("ok"):
-            return {"confirmed": False, "error": data.get("error", "unknown")}
+            return {
+                "confirmed": False,
+                "error": _humanize_slack_history_error(data.get("error", "unknown")),
+            }
         for msg in data.get("messages", []):
             if msg.get("subtype") == "bot_message":
                 continue

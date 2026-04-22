@@ -141,24 +141,30 @@ class TrelloClient:
     # Card operations
     # ------------------------------------------------------------------
 
+    def _build_trello_card(self, data: dict, fallback_list_id: str = "") -> TrelloCard:
+        card_id = data.get("id", "")
+        return TrelloCard(
+            id=card_id,
+            name=data.get("name", ""),
+            desc=data.get("desc", ""),
+            url=data.get("url", ""),
+            list_id=data.get("idList", fallback_list_id),
+            labels=[lb.get("name", "") for lb in data.get("labels", []) if lb.get("name")],
+            member_ids=data.get("idMembers", []),
+            comments=self.get_card_comments(card_id) if card_id else [],
+            attachments=self.get_card_attachments(card_id) if card_id else [],
+            checklists=self.get_card_checklists(card_id) if card_id else [],
+        )
+
     def get_cards_in_list(self, list_id: str) -> list[TrelloCard]:
         """Return all cards in the given list."""
         data = self._get(f"lists/{list_id}/cards")
-        return [
-            TrelloCard(
-                id=c["id"],
-                name=c.get("name", ""),
-                desc=c.get("desc", ""),
-                url=c.get("url", ""),
-                list_id=c.get("idList", list_id),
-                labels=[lb.get("name", "") for lb in c.get("labels", []) if lb.get("name")],
-                member_ids=c.get("idMembers", []),
-                comments=self.get_card_comments(c["id"]),
-                attachments=self.get_card_attachments(c["id"]),
-                checklists=self.get_card_checklists(c["id"]),
-            )
-            for c in data
-        ]
+        return [self._build_trello_card(c, fallback_list_id=list_id) for c in data]
+
+    def get_card(self, card_id: str) -> TrelloCard:
+        """Fetch a single Trello card with comments, attachments, checklists, and labels."""
+        data = self._get(f"cards/{card_id}")
+        return self._build_trello_card(data)
 
     def create_card_in_list(
         self,
@@ -234,11 +240,11 @@ class TrelloClient:
 
     def get_card_comments(self, card_id: str) -> list[str]:
         """Fetch comment text from a card. Returns list of comment strings (newest first)."""
-        actions = self._get(f"cards/{card_id}/actions", filter="commentCard")
+        actions = self._get(f"cards/{card_id}/actions", filter="commentCard,copyCommentCard")
         return [
             a["data"]["text"]
             for a in actions
-            if a.get("type") == "commentCard" and "data" in a and "text" in a["data"]
+            if a.get("type") in {"commentCard", "copyCommentCard"} and "data" in a and "text" in a["data"]
         ]
 
     def get_card_attachments(self, card_id: str) -> list[dict]:
