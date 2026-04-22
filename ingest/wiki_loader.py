@@ -20,7 +20,6 @@ import logging
 from pathlib import Path
 
 from langchain_core.documents import Document
-from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 import config
 
@@ -72,6 +71,7 @@ def load_wiki_docs(wiki_path: str | None = None) -> list[Document]:
         )
         return []
 
+    from langchain_text_splitters import RecursiveCharacterTextSplitter
     splitter = RecursiveCharacterTextSplitter(
         chunk_size=config.CHUNK_SIZE,
         chunk_overlap=config.CHUNK_OVERLAP,
