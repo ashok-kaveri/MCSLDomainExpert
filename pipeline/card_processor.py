@@ -547,7 +547,7 @@ def generate_acceptance_criteria(
         research_context=research_context or "None",
     )
     llm = _make_llm(model=model, temperature=0.3, max_tokens=2048)
-    response = _invoke_llm_with_timeout(llm, prompt)
+    response = llm.invoke([HumanMessage(content=prompt)])
     ac_markdown = response.content.strip()
     if not review:
         _set_last_ac_review(_DEFAULT_REVIEW_STATE)
