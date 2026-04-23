@@ -14,7 +14,6 @@ import os
 import re
 import threading
 import urllib.request
-from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
 from dataclasses import dataclass, field as dc_field
 from functools import lru_cache
 from pathlib import Path
@@ -66,22 +65,8 @@ def _make_llm(
         api_key=config.ANTHROPIC_API_KEY,
         temperature=temperature,
         max_tokens=max_tokens,
+        default_request_timeout=_LLM_TIMEOUT_SECONDS,
     )
-
-
-def _invoke_llm_with_timeout(llm, prompt: str, *, timeout_seconds: int | None = None):
-    timeout = timeout_seconds or _LLM_TIMEOUT_SECONDS
-    executor = ThreadPoolExecutor(max_workers=1)
-    future = executor.submit(llm.invoke, [HumanMessage(content=prompt)])
-    try:
-        return future.result(timeout=timeout)
-    except FuturesTimeoutError as exc:
-        raise TimeoutError(
-            f"Claude request timed out after {timeout}s. "
-            "Try again or reduce the card context size."
-        ) from exc
-    finally:
-        executor.shutdown(wait=False, cancel_futures=True)
 
 
 def _set_last_ac_review(data: dict[str, object]) -> None:
@@ -638,7 +623,7 @@ def generate_test_cases(card, model: str | None = None, ac_text: str | None = No
         ac_text=ac_text_str,
     )
     llm = _make_llm(model=model, temperature=0.3, max_tokens=2048)
-    response = _invoke_llm_with_timeout(llm, prompt)
+    response = llm.invoke([HumanMessage(content=prompt)])
     return _review_and_rewrite_test_cases(
         card_name=card.name,
         card_desc=_requirements_text or "(no description)",
@@ -664,7 +649,7 @@ def _review_and_rewrite_ac(
         ac_markdown=ac_markdown or "(empty)",
     )
     try:
-        review_resp = _invoke_llm_with_timeout(llm, review_prompt)
+        review_resp = llm.invoke([HumanMessage(content=review_prompt)])
         review_raw = re.sub(r"```(?:json)?", "", review_resp.content.strip()).strip().rstrip("`").strip()
         review_data = json.loads(review_raw)
     except Exception:
@@ -690,7 +675,7 @@ def _review_and_rewrite_ac(
         review_summary=review_summary,
         ac_markdown=ac_markdown,
     )
-    rewrite_resp = _invoke_llm_with_timeout(llm, rewrite_prompt)
+    rewrite_resp = llm.invoke([HumanMessage(content=rewrite_prompt)])
     return rewrite_resp.content.strip()
 
 
@@ -715,7 +700,7 @@ def review_acceptance_criteria(
         ac_markdown=ac_markdown or "(empty)",
     )
     try:
-        review_resp = _invoke_llm_with_timeout(llm, review_prompt)
+        review_resp = llm.invoke([HumanMessage(content=review_prompt)])
         review_raw = re.sub(r"```(?:json)?", "", review_resp.content.strip()).strip().rstrip("`").strip()
         review_data = json.loads(review_raw)
     except Exception:
@@ -844,6 +829,12 @@ def _build_feedback_context_section_cached(card_name: str, card_desc: str) -> st
         return ""
 
 
+def clear_tc_context_caches() -> None:
+    _build_rag_context_section_cached.cache_clear()
+    _build_code_context_section_cached.cache_clear()
+    _build_feedback_context_section_cached.cache_clear()
+
+
 def _build_tc_supporting_context(
     *,
     dev_comments_section: str = "",
@@ -885,7 +876,7 @@ def _review_and_rewrite_test_cases(
         test_cases_markdown=test_cases_markdown or "(empty)",
     )
     try:
-        review_resp = _invoke_llm_with_timeout(llm, review_prompt)
+        review_resp = llm.invoke([HumanMessage(content=review_prompt)])
         review_raw = re.sub(r"```(?:json)?", "", review_resp.content.strip()).strip().rstrip("`").strip()
         review_data = json.loads(review_raw)
     except Exception:
@@ -912,7 +903,7 @@ def _review_and_rewrite_test_cases(
         review_summary=review_summary,
         test_cases_markdown=test_cases_markdown,
     )
-    rewrite_resp = _invoke_llm_with_timeout(llm, rewrite_prompt)
+    rewrite_resp = llm.invoke([HumanMessage(content=rewrite_prompt)])
     return rewrite_resp.content.strip()
 
 
@@ -933,7 +924,7 @@ def review_test_cases(
         test_cases_markdown=test_cases_markdown or "(empty)",
     )
     try:
-        review_resp = _invoke_llm_with_timeout(llm, review_prompt)
+        review_resp = llm.invoke([HumanMessage(content=review_prompt)])
         review_raw = re.sub(r"```(?:json)?", "", review_resp.content.strip()).strip().rstrip("`").strip()
         review_data = json.loads(review_raw)
     except Exception:
@@ -967,7 +958,7 @@ def regenerate_with_feedback(
         previous_test_cases=previous_test_cases,
         feedback=feedback,
     )
-    response = _invoke_llm_with_timeout(llm, prompt)
+    response = llm.invoke([HumanMessage(content=prompt)])
     return _review_and_rewrite_test_cases(
         card_name=card.name,
         card_desc=_requirements_text or "(no description)",
