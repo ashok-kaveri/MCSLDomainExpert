@@ -97,6 +97,16 @@ def detect_tab(card_name: str, test_cases_markdown: str) -> str:
 # parse_test_cases_to_rows (local implementation — parallel with card_processor.py)
 # ---------------------------------------------------------------------------
 
+def _bdd_steps_from_block(block: str) -> list[str]:
+    """Extract Given/When/And/Then/But lines from anywhere in a TC block."""
+    steps = []
+    for line in block.splitlines():
+        stripped = line.strip()
+        if re.match(r"^(Given|When|And|Then|But)\b", stripped, re.IGNORECASE):
+            steps.append(stripped)
+    return steps
+
+
 def parse_test_cases_to_rows(
     card_name: str,
     test_cases_markdown: str,
@@ -110,8 +120,11 @@ def parse_test_cases_to_rows(
         block = block.strip()
         if not block or not re.match(r"^#{2,3}\s+TC-\d+", block):
             continue
-        title_match = re.match(r"^#{2,3}\s+TC-\d+[:\s]+(.+)", block)
-        scenario = title_match.group(1).strip() if title_match else card_name
+
+        title_match = re.match(r"^#{2,3}\s+(TC-\d+)[:\s]+(.+)", block)
+        tc_num = title_match.group(1) if title_match else "TC-?"
+        tc_title = title_match.group(2).strip() if title_match else card_name
+
         tc_type = "Positive"
         priority = "Medium"
         type_match = re.search(r"\*\*Type:\*\*\s*(.+)", block)
@@ -120,30 +133,26 @@ def parse_test_cases_to_rows(
         priority_match = re.search(r"\*\*Priority:\*\*\s*(.+)", block)
         if priority_match:
             priority = priority_match.group(1).strip()
+
         if positive_only and "positive" not in tc_type.lower():
             continue
+
         preconditions_match = re.search(r"\*\*Preconditions?:\*\*\s*(.+?)(?:\n|$)", block, re.IGNORECASE)
         comments = preconditions_match.group(1).strip() if preconditions_match else ""
-        gwt_parts = []
-        in_steps = False
-        for line in block.splitlines():
-            stripped = line.strip()
-            if re.match(r"\*\*Steps:\*\*", stripped, re.IGNORECASE):
-                in_steps = True
-                continue
-            if in_steps and re.match(r"\*\*.+\*\*", stripped) and not re.match(
-                r"^(Given|When|And|Then|But)\b", stripped, re.IGNORECASE
-            ):
-                break
-            if re.match(r"^(Given|When|And|Then|But)\b", stripped, re.IGNORECASE):
-                gwt_parts.append(stripped)
-                in_steps = True
-        description = "\n".join(gwt_parts) if gwt_parts else block[:200]
+
+        # Build a clean BDD description: "Scenario: <title>\n  Given ...\n  When ...\n  Then ..."
+        steps = _bdd_steps_from_block(block)
+        if steps:
+            bdd_lines = [f"Scenario: {tc_title}"] + [f"  {s}" for s in steps]
+            description = "\n".join(bdd_lines)
+        else:
+            description = f"Scenario: {tc_title}"
+
         rows.append(
             TestCaseRow(
                 si_no=si,
                 epic=epic or card_name,
-                scenario=scenario,
+                scenario=f"{tc_num}: {tc_title}",
                 description=description,
                 comments=comments,
                 priority=priority,
