@@ -1734,6 +1734,26 @@ st.set_page_config(
 st.markdown(_CSS, unsafe_allow_html=True)
 
 
+def _summarise_tc_counts(card_name: str, tc_markdown: str) -> tuple[int, int, int, int]:
+    """Return (total, positive, negative, edge) counts parsed from TC markdown."""
+    import re
+    blocks = re.split(r"(?=^#{2,3}\s+TC-\d+)", tc_markdown, flags=re.MULTILINE)
+    pos = neg = edge = 0
+    for block in blocks:
+        block = block.strip()
+        if not block or not re.match(r"^#{2,3}\s+TC-\d+", block):
+            continue
+        type_match = re.search(r"\*\*Type:\*\*\s*(Positive|Negative|Edge)", block, re.IGNORECASE)
+        tc_type = type_match.group(1).capitalize() if type_match else "Positive"
+        if tc_type == "Positive":
+            pos += 1
+        elif tc_type == "Negative":
+            neg += 1
+        else:
+            edge += 1
+    return pos + neg + edge, pos, neg, edge
+
+
 # ── Main entry point ──────────────────────────────────────────────────────────
 
 def main() -> None:
