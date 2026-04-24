@@ -384,110 +384,230 @@ def generate_business_brief(ctx: HandoffDocContext) -> str:
         return _fallback_business_doc(ctx)
 
 
+def _md_to_rl(text: str) -> str:
+    """Convert basic markdown inline formatting to ReportLab XML tags."""
+    # Bold+italic ***text***
+    text = re.sub(r'\*\*\*(.+?)\*\*\*', r'<b><i>\1</i></b>', text)
+    # Bold **text**
+    text = re.sub(r'\*\*(.+?)\*\*', r'<b>\1</b>', text)
+    # Italic *text*
+    text = re.sub(r'\*(.+?)\*', r'<i>\1</i>', text)
+    # Inline code `text`
+    text = re.sub(r'`(.+?)`', r'<font name="Courier">\1</font>', text)
+    return text
+
+
 def render_pdf_bytes(title: str, markdown_text: str) -> bytes:
     try:
         from reportlab.lib.colors import HexColor
         from reportlab.lib.pagesizes import A4
-        from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
+        from reportlab.lib.styles import ParagraphStyle
         from reportlab.lib.units import inch
-        from reportlab.platypus import HRFlowable, Paragraph, SimpleDocTemplate, Spacer
+        from reportlab.platypus import (
+            HRFlowable, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle,
+        )
     except ModuleNotFoundError as exc:
         raise RuntimeError("PDF rendering requires reportlab to be installed") from exc
 
+    PAGE_W, PAGE_H = A4
+    LM = RM = 0.65 * inch
+    CW = PAGE_W - LM - RM
+
+    # ── Colour palette (matches Order Grid Filtering reference) ─────────────
+    C_DARK     = HexColor("#1e1b4b")   # header / footer background
+    C_MED      = HexColor("#2d1b69")   # header gradient feel
+    C_META_BG  = HexColor("#2d2a6e")   # metadata strip
+    C_PURPLE   = HexColor("#6d28d9")   # section headings
+    C_ORANGE   = HexColor("#ea580c")   # accent / subtitle / badge label
+    C_ACCENT   = HexColor("#7c3aed")   # heading left-border accent
+    C_WHITE    = HexColor("#ffffff")
+    C_OFFWHITE = HexColor("#c4b5fd")   # header description text
+    C_META_TXT = HexColor("#a5b4fc")   # metadata text
+    C_TEXT     = HexColor("#1a202c")
+    C_GRAY     = HexColor("#4a5568")
+    C_BORDER   = HexColor("#e2e8f0")
+    C_ROW_BG   = HexColor("#faf5ff")   # alternating row bg
+
+    # ── Paragraph styles ────────────────────────────────────────────────────
+    def _ps(name, **kw):
+        return ParagraphStyle(name, **kw)
+
+    hdr_badge  = _ps("HBadge",  fontName="Helvetica-Bold", fontSize=9,  leading=12, textColor=C_ORANGE)
+    hdr_title  = _ps("HTitle",  fontName="Helvetica-Bold", fontSize=24, leading=30, textColor=C_WHITE)
+    hdr_sub    = _ps("HSub",    fontName="Helvetica-Bold", fontSize=11, leading=15, textColor=C_ORANGE)
+    hdr_desc   = _ps("HDesc",   fontName="Helvetica",      fontSize=10, leading=14, textColor=C_OFFWHITE)
+    hdr_meta   = _ps("HMeta",   fontName="Helvetica",      fontSize=9,  leading=12, textColor=C_META_TXT)
+    h2_style   = _ps("H2",      fontName="Helvetica-Bold", fontSize=12, leading=16, textColor=C_PURPLE,
+                                spaceBefore=10, spaceAfter=3)
+    h3_style   = _ps("H3",      fontName="Helvetica-BoldOblique", fontSize=11, leading=14,
+                                textColor=C_PURPLE, spaceBefore=7, spaceAfter=3)
+    body_style = _ps("Body",    fontName="Helvetica",      fontSize=10.5, leading=15, textColor=C_TEXT,
+                                spaceAfter=5)
+    bullet_sty = _ps("Bullet",  fontName="Helvetica",      fontSize=10.5, leading=15, textColor=C_TEXT,
+                                spaceAfter=4, leftIndent=14)
+    num_style  = _ps("Num",     fontName="Helvetica",      fontSize=10.5, leading=15, textColor=C_TEXT,
+                                spaceAfter=4, leftIndent=16)
+    quote_sty  = _ps("Quote",   fontName="Helvetica-Oblique", fontSize=10.5, leading=15,
+                                textColor=C_GRAY, leftIndent=18, rightIndent=18, spaceAfter=6)
+    footer_sty = _ps("Footer",  fontName="Helvetica",      fontSize=7.5, leading=10, textColor=C_WHITE)
+
+    # ── Helper: two-column heading with left accent bar ──────────────────────
+    def _h2_row(text: str):
+        accent_tbl = Table([[""]], colWidths=[5], rowHeights=[16])
+        accent_tbl.setStyle(TableStyle([
+            ("BACKGROUND",    (0, 0), (-1, -1), C_ACCENT),
+            ("TOPPADDING",    (0, 0), (-1, -1), 0),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
+            ("LEFTPADDING",   (0, 0), (-1, -1), 0),
+            ("RIGHTPADDING",  (0, 0), (-1, -1), 0),
+        ]))
+        p = Paragraph(_md_to_rl(text), h2_style)
+        row = Table([[accent_tbl, p]], colWidths=[7, CW - 7])
+        row.setStyle(TableStyle([
+            ("VALIGN",        (0, 0), (-1, -1), "MIDDLE"),
+            ("TOPPADDING",    (0, 0), (-1, -1), 0),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
+            ("LEFTPADDING",   (0, 0), (-1, -1), 0),
+            ("RIGHTPADDING",  (0, 0), (-1, -1), 0),
+            ("LEFTPADDING",   (0, 1), (0, 1), 8),
+        ]))
+        return [
+            row,
+            HRFlowable(width=CW, thickness=0.5, color=C_BORDER, spaceAfter=4),
+        ]
+
+    # ── Detect doc type badge ────────────────────────────────────────────────
+    tl = title.lower()
+    if any(w in tl for w in ["delay", "fix", "bug", "error", "performance", "slow"]):
+        badge_txt, badge_color = "PERFORMANCE FIX", HexColor("#c2410c")
+    elif any(w in tl for w in ["new", "feature", "add", "introduc"]):
+        badge_txt, badge_color = "NEW FEATURE", C_ORANGE
+    else:
+        badge_txt, badge_color = "UPDATE", HexColor("#0369a1")
+
+    # Clean title for display (strip Trello ID / "From SL:" prefix)
+    clean_title = re.sub(r'\[#\d+\]', '', title).strip()
+    clean_title = re.sub(r'From SL:\s*[A-Z]+-\d+\s*[—–-]\s*', '', clean_title).strip()
+
+    # Auto-detect subtitle (carriers)
+    carriers_found = re.findall(
+        r'\b(Australia Post|eParcel|MyPost|FedEx|UPS|DHL|USPS|Stamps)\b', title, re.IGNORECASE
+    )
+    subtitle = "MCSL App"
+    if carriers_found:
+        subtitle = "MCSL App  ·  " + " / ".join(dict.fromkeys(c.title() for c in carriers_found))
+
+    # ── Parse markdown — extract first H1 description ───────────────────────
+    lines = (markdown_text or "").splitlines()
+    content_lines: list[str] = []
+    desc_text = ""
+    skip_h1 = True
+    for line in lines:
+        if skip_h1 and line.startswith("# "):
+            skip_h1 = False
+            continue
+        content_lines.append(line)
+        if not desc_text:
+            s = line.strip()
+            if s and not s.startswith("#") and not s.startswith("-"):
+                desc_text = s[:160] + ("…" if len(s) > 160 else "")
+
+    # ── Build story ──────────────────────────────────────────────────────────
     buf = io.BytesIO()
-    doc = SimpleDocTemplate(
-        buf,
-        pagesize=A4,
-        leftMargin=0.7 * inch,
-        rightMargin=0.7 * inch,
-        topMargin=0.75 * inch,
-        bottomMargin=0.75 * inch,
+
+    def _draw_footer(canvas_obj, doc):
+        canvas_obj.saveState()
+        canvas_obj.setFillColor(C_DARK)
+        canvas_obj.rect(0, 0, PAGE_W, 22, fill=1, stroke=0)
+        canvas_obj.setFillColor(C_WHITE)
+        canvas_obj.setFont("Helvetica", 7.5)
+        canvas_obj.drawString(LM, 7, f"Generated {_dt.datetime.now().strftime('%B %d, %Y')}")
+        canvas_obj.drawCentredString(PAGE_W / 2, 7, f"Page {doc.page}")
+        canvas_obj.drawRightString(PAGE_W - RM, 7, "pluginhive.com")
+        canvas_obj.restoreState()
+
+    doc_obj = SimpleDocTemplate(
+        buf, pagesize=A4,
+        leftMargin=LM, rightMargin=RM,
+        topMargin=0.4 * inch, bottomMargin=0.45 * inch,
         title=title,
     )
-    styles = getSampleStyleSheet()
-    title_style = ParagraphStyle(
-        "DocTitle",
-        parent=styles["Heading1"],
-        textColor=HexColor("#0f5c4d"),
-        fontSize=20,
-        leading=24,
-        spaceAfter=10,
-    )
-    heading_style = ParagraphStyle(
-        "DocHeading",
-        parent=styles["Heading2"],
-        textColor=HexColor("#113a5c"),
-        fontSize=13,
-        leading=16,
-        spaceBefore=10,
-        spaceAfter=6,
-    )
-    subheading_style = ParagraphStyle(
-        "DocSubHeading",
-        parent=styles["Heading3"],
-        textColor=HexColor("#2b4c66"),
-        fontSize=11.5,
-        leading=14,
-        spaceBefore=8,
-        spaceAfter=4,
-    )
-    body_style = ParagraphStyle(
-        "DocBody",
-        parent=styles["BodyText"],
-        fontSize=10.5,
-        leading=14,
-        textColor=HexColor("#1f2933"),
-        spaceAfter=6,
-    )
-    meta_style = ParagraphStyle(
-        "DocMeta",
-        parent=styles["BodyText"],
-        fontSize=9.5,
-        leading=12,
-        textColor=HexColor("#52606d"),
-        spaceAfter=4,
-    )
-    bullet_style = ParagraphStyle(
-        "DocBullet",
-        parent=body_style,
-        leftIndent=12,
-        firstLineIndent=-8,
-    )
-    number_style = ParagraphStyle(
-        "DocNumber",
-        parent=body_style,
-        leftIndent=14,
-        firstLineIndent=-10,
-    )
 
-    story = [
-        Paragraph(title, title_style),
-        Paragraph(f"Generated on { _dt.datetime.now().strftime('%Y-%m-%d %H:%M') }", meta_style),
-        HRFlowable(width="100%", thickness=1, color=HexColor("#d9e2ec")),
-        Spacer(1, 0.12 * inch),
-    ]
-    for line in (markdown_text or "").splitlines():
+    story: list = []
+
+    # ── Branded header panel ─────────────────────────────────────────────────
+    badge_p = Paragraph(badge_txt, ParagraphStyle(
+        "BadgePara", fontName="Helvetica-Bold", fontSize=9, leading=12, textColor=badge_color,
+    ))
+    title_p  = Paragraph(clean_title, hdr_title)
+    sub_p    = Paragraph(subtitle, hdr_sub)
+    desc_p   = Paragraph(_md_to_rl(desc_text), hdr_desc) if desc_text else Spacer(1, 4)
+
+    hdr_tbl = Table(
+        [[badge_p], [title_p], [sub_p], [desc_p]],
+        colWidths=[CW],
+    )
+    hdr_tbl.setStyle(TableStyle([
+        ("BACKGROUND",    (0, 0), (-1, -1), C_MED),
+        ("TOPPADDING",    (0, 0), (0, 0), 16),
+        ("BOTTOMPADDING", (0, 0), (0, 0), 4),
+        ("TOPPADDING",    (0, 1), (0, 1), 4),
+        ("BOTTOMPADDING", (0, 1), (0, 1), 6),
+        ("TOPPADDING",    (0, 2), (0, 2), 2),
+        ("BOTTOMPADDING", (0, 2), (0, 2), 8),
+        ("TOPPADDING",    (0, 3), (0, 3), 0),
+        ("BOTTOMPADDING", (0, 3), (0, 3), 16),
+        ("LEFTPADDING",   (0, 0), (-1, -1), 20),
+        ("RIGHTPADDING",  (0, 0), (-1, -1), 20),
+    ]))
+
+    # Metadata strip (Trello, date, team)
+    meta_txt = (
+        f"Generated {_dt.datetime.now().strftime('%B %Y')}     ·     "
+        f"PluginHive QA Team"
+    )
+    meta_tbl = Table([[Paragraph(meta_txt, hdr_meta)]], colWidths=[CW])
+    meta_tbl.setStyle(TableStyle([
+        ("BACKGROUND",    (0, 0), (-1, -1), C_META_BG),
+        ("TOPPADDING",    (0, 0), (-1, -1), 8),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 8),
+        ("LEFTPADDING",   (0, 0), (-1, -1), 20),
+        ("RIGHTPADDING",  (0, 0), (-1, -1), 20),
+    ]))
+
+    story.append(hdr_tbl)
+    story.append(meta_tbl)
+    story.append(Spacer(1, 0.22 * inch))
+
+    # ── Render content lines ─────────────────────────────────────────────────
+    for line in content_lines:
         clean = line.strip()
         if not clean:
-            story.append(Spacer(1, 0.08 * inch))
-            continue
-        if clean.startswith("# "):
-            story.append(Paragraph(clean[2:].strip(), title_style))
+            story.append(Spacer(1, 0.06 * inch))
             continue
         if clean.startswith("## "):
-            story.append(Paragraph(clean[3:].strip(), heading_style))
-            story.append(HRFlowable(width="100%", thickness=0.6, color=HexColor("#bcccdc")))
-            story.append(Spacer(1, 0.04 * inch))
-            continue
-        if clean.startswith("### "):
-            story.append(Paragraph(clean[4:].strip(), subheading_style))
-            continue
-        if clean.startswith("- "):
-            story.append(Paragraph(f"• {clean[2:].strip()}", bullet_style))
-            continue
-        if re.match(r"^\d+\.\s+", clean):
-            story.append(Paragraph(clean, number_style))
-            continue
-        story.append(Paragraph(clean, body_style))
-    doc.build(story)
+            story.extend(_h2_row(clean[3:].strip()))
+        elif clean.startswith("### "):
+            story.append(Paragraph(_md_to_rl(clean[4:].strip()), h3_style))
+        elif clean.startswith("# "):
+            story.extend(_h2_row(clean[2:].strip()))
+        elif clean.startswith("- ") or clean.startswith("* "):
+            text = _md_to_rl(clean[2:].strip())
+            story.append(Paragraph(
+                f'<font color="#7c3aed">&#x25CF;</font>  {text}', bullet_sty,
+            ))
+        elif re.match(r"^\d+\.\s+", clean):
+            m = re.match(r"^(\d+)\.\s+(.*)", clean)
+            if m:
+                n, content = m.group(1), _md_to_rl(m.group(2))
+                story.append(Paragraph(
+                    f'<font color="#ea580c"><b>{n}.</b></font>  {content}', num_style,
+                ))
+        elif clean.startswith('"') or clean.startswith('\u201c'):
+            story.append(Paragraph(_md_to_rl(clean), quote_sty))
+        else:
+            story.append(Paragraph(_md_to_rl(clean), body_style))
+
+    story.append(Spacer(1, 0.3 * inch))
+    doc_obj.build(story, onFirstPage=_draw_footer, onLaterPages=_draw_footer)
     return buf.getvalue()
