@@ -187,7 +187,6 @@ Use this exact section order:
 5. `## Who Benefits`
 6. `## How to Get Started`
 7. `## What Stays the Same`
-8. `## Release Details`
 
 Section guidelines:
 - **The Problem We Solved**: Tell the story from a merchant's perspective. What frustration or blocker did they hit? \
@@ -200,8 +199,6 @@ Section guidelines:
 - **How to Get Started**: Simple numbered steps in plain English. Use app navigation in natural language \
   (e.g. "Go to Settings → Carriers → FedEx" not raw path codes). No more than 5 steps.
 - **What Stays the Same**: Reassure merchants what hasn't changed. Calm any migration concerns.
-- **Release Details**: Carrier scope in plain English, any prerequisites, release name, team credits. \
-  Include Trello link if available.
 
 Rules:
 - Never mention API fields, JSON payloads, enum values, or code identifiers
@@ -358,13 +355,6 @@ reducing the chance of errors and speeding up fulfilment.
 - All your existing carrier settings and label configurations are untouched
 - Other carriers and shipping flows work exactly as before
 - No migration or re-configuration is needed for current setups
-
-## Release Details
-- Release: {ctx.release_name or 'Latest'}
-- Carriers: {carriers}
-- Developed by: {', '.join(ctx.developer_names) if ctx.developer_names else 'PluginHive Engineering'}
-- Tested by: {', '.join(ctx.tester_names) if ctx.tester_names else 'PluginHive QA'}
-- Trello: {ctx.card_url or 'N/A'}
 """
 
 
