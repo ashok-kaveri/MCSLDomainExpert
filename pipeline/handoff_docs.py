@@ -135,35 +135,41 @@ def build_handoff_context(
     )
 
 
-_SUPPORT_PROMPT = """You are writing a polished internal Support Guide for an MCSL Shopify shipping feature handoff.
+_SUPPORT_PROMPT = """You are writing a detailed QA & support handoff document for an MCSL Shopify shipping feature.
 
-Write a practical, support/demo-friendly document in clean markdown.
+This document is used internally by QA engineers, support staff, and account managers. \
+It should read like a polished product release guide — structured, scenario-rich, and immediately actionable.
 
-Requirements:
-- Use this exact high-level section order — no other sections allowed:
-  1. `# Support Guide - <feature name>`
-  2. `## Snapshot`
-  3. `## Ownership`
-  4. `## Prerequisites`
-  5. `## Where to Find It`
-  6. `## Support Walkthrough`
-  7. `## Scenarios`
-  8. `## Expected Outcome`
-- In `Snapshot`, use 3-5 short bullets only
-- In `Ownership` and `Prerequisites`, keep bullets compact and scannable
-- In `Support Walkthrough`, use numbered steps describing the end-to-end flow
-- In `Scenarios`, write 2-3 short named scenarios (### Scenario 1: ...) showing real merchant \
-  or support situations where this feature applies — include what the merchant does and what they see. \
-  Be concrete and specific to the feature; avoid generic examples.
-- In `Expected Outcome`, use bullets describing what a successful result looks like
-- Mention MCSL navigation using only supported paths such as ORDERS, LABELS, PICKUP, hamburger menu items, and Shopify admin verification pages when relevant
-- If carriers are mentioned in context, call them out clearly and mention carrier-specific prerequisites only when supported by the context
-- If the flow involves rate troubleshooting, request log, label request, packaging, or Shopify fulfillment verification, mention that explicitly when supported by the context
-- Keep the tone polished, crisp, and easy for support/demo teams to skim quickly
-- Avoid giant paragraphs and avoid repeating the same facts across sections
-- DO NOT generate any of these sections: Key Findings, AI Code Analysis, Troubleshooting Notes, Limitations / Rollout Notes, References
-Use facts from the context only. Do not invent unsupported details.
-Keep it concise but useful.
+Use this EXACT section order — no other sections:
+
+1. `# <Feature Name>` — short descriptive title only (no "Support Guide" prefix)
+2. `## The Problem` — 3-5 short bullet points describing the merchant pain \
+   before this feature. Each bullet: one concrete frustration. No paragraphs.
+3. `## The Solution` — one-paragraph overview of what the feature does, followed by \
+   a `### <Capability Name>` subsection for EACH major capability. \
+   Each subsection: 1-2 sentences describing what it does and when a merchant uses it.
+4. `## Key Benefits` — markdown table with two columns: **Benefit** and **Description**. \
+   5-6 rows. Each row: one clear, merchant-facing gain (speed, accuracy, continuity, etc.).
+5. `## User Story` — one sentence starting with a double-quote: \
+   `"As a merchant using the MCSL app, I want to..."`
+6. `## How to Use` — numbered steps (1 through N) describing the end-to-end flow \
+   a merchant follows to use this feature. Use MCSL app navigation paths. Keep each step tight.
+7. `## Test Scenarios` — ALL test cases from the context formatted as grouped markdown tables. \
+   Group by logical area (e.g. Order ID Filter, Date Filter, Combination Tests). \
+   Each group: a `### [Group Name]` heading followed by a markdown table with columns: \
+   `| # | Scenario | Expected Result |`. \
+   Derive scenario rows from the test cases in the context. Include ALL of them — do not summarise.
+8. `## Acceptance Criteria Checklist` — every acceptance criterion as a checkbox bullet: \
+   `- [ ] <criterion text>`. One item per line. Cover all ACs from the context.
+
+Formatting rules:
+- Use markdown tables with pipe syntax — header row, separator row (|---|---|), then data rows
+- Use `### Scenario N: <name>` format only under The Solution — not elsewhere
+- Never use giant paragraphs — prefer bullets, numbered lists, and tables
+- Mention MCSL navigation paths naturally (ORDERS tab, hamburger menu → Carriers, etc.)
+- Call out carrier names explicitly when the feature is carrier-specific
+- DO NOT add: Key Findings, AI Code Analysis, Troubleshooting Notes, Limitations, Rollout Notes, References
+- Use facts from the context only. Do not invent test cases or ACs not present in the context.
 
 CONTEXT:
 {context}
@@ -263,50 +269,65 @@ def _invoke_doc_prompt(prompt: str, ctx: HandoffDocContext) -> str:
 
 
 def _fallback_support_doc(ctx: HandoffDocContext) -> str:
-    toggles = ", ".join(ctx.toggle_names) if ctx.toggle_names else "None detected"
-    devs = ", ".join(ctx.developer_names) if ctx.developer_names else "Unknown"
-    testers = ", ".join(ctx.tester_names) if ctx.tester_names else "QA Team"
-    carriers = ", ".join(ctx.carrier_names) if ctx.carrier_names else "Carrier-neutral"
-    navigation = "\n".join(f"- {item}" for item in (ctx.likely_navigation or ["MCSL embedded app main flow"]))
-    return f"""# Support Guide - {ctx.card_name}
+    carriers = ", ".join(ctx.carrier_names) if ctx.carrier_names else "carrier-neutral"
+    nav_steps = ctx.likely_navigation or ["MCSL embedded app main flow"]
+    nav_numbered = "\n".join(f"{i+1}. {item}" for i, item in enumerate(nav_steps))
+    ac_lines = ""
+    if ctx.acceptance_criteria:
+        for line in ctx.acceptance_criteria.splitlines():
+            s = line.strip().lstrip("-").lstrip("*").strip()
+            if s and not s.startswith("#"):
+                ac_lines += f"- [ ] {s}\n"
+    if not ac_lines:
+        ac_lines = "- [ ] Verify feature behaves as described in the approved card scope\n"
+    return f"""# {ctx.card_name}
 
-## Snapshot
-- Release: {ctx.release_name or 'Unknown'}
-- Approved: {ctx.approved_at or 'Unknown'}
-- Carrier scope: {carriers}
-- Toggles: {toggles}
+## The Problem
+- Merchants struggled to complete this workflow without errors or manual workarounds
+- The existing flow lacked the capability described in this feature
+- {carriers} users were particularly impacted when performing related operations
+- No built-in mechanism existed to handle the scenario covered by this update
 
-## Ownership
-- Developed by: {devs}
-- Tested by: {testers}
+## The Solution
+This update introduces the capability described in the card scope, making the workflow faster and more reliable for merchants using {carriers} through the MCSL app.
 
-## Prerequisites
-- Toggles / rollout items: {toggles}
-- Carriers in scope: {carriers}
-- Confirm store setup, carrier account state, and any packaging or automation prerequisites before demo or support.
+{nav_numbered}
 
-## Where to Find It
-{navigation}
+## Key Benefits
 
-## Support Walkthrough
-1. Open the relevant MCSL app area and confirm the store/account context is correct.
-2. Reproduce the flow using the approved acceptance criteria and latest test cases.
-3. Verify the expected system behaviour before checking downstream Shopify or carrier-side evidence.
-4. Use request-log, label, automation, or fulfillment evidence when the issue depends on those paths.
+| Benefit | Description |
+|---------|-------------|
+| Accuracy | Results match exactly what was requested — no false positives |
+| Speed | The operation completes without noticeable delay or page reload |
+| Reliability | Existing workflows and configurations are fully preserved |
+| Clarity | The UI makes the current state immediately visible |
+| Safety | No regressions introduced to adjacent features |
 
-## Scenarios
+## User Story
 
-### Scenario 1: Standard merchant flow
-A merchant using {carriers} opens the MCSL app and follows the walkthrough above. \
-The feature is available without additional configuration once the prerequisites are met.
+"As a merchant using the MCSL app, I want to use this feature so that I can complete my shipping workflow faster and with fewer errors."
 
-### Scenario 2: Support triage
-A support agent receives a query about this feature. They confirm prerequisites, \
-reproduce the flow, and verify the expected outcome matches the approved acceptance criteria.
+## How to Use
 
-## Expected Outcome
-- {(ctx.ai_qa_summary or 'The feature behaves as described in the approved acceptance criteria and test cases.').strip()[:1200]}
-- The feature should behave consistently with the approved card scope and release notes.
+1. Open the MCSL app from your Shopify Admin panel
+2. Navigate to the relevant section: {nav_steps[0]}
+3. Locate the new capability as described in the card scope
+4. Apply or configure it according to your store's requirements
+5. Verify the outcome matches the expected behaviour described in the acceptance criteria
+
+## Test Scenarios
+
+### Core Scenarios
+
+| # | Scenario | Expected Result |
+|---|----------|-----------------|
+| 1 | Feature used with valid inputs | Expected outcome displayed correctly |
+| 2 | Feature used with invalid or empty inputs | Empty state or error shown gracefully |
+| 3 | Feature combined with existing related functionality | No regression; both work correctly |
+
+## Acceptance Criteria Checklist
+
+{ac_lines.strip()}
 """
 
 
@@ -590,9 +611,77 @@ def render_pdf_bytes(title: str, markdown_text: str) -> bytes:
 
     story += [hdr_border, hdr_tbl, meta_tbl, Spacer(1, 0.25 * inch)]
 
-    # ── Render content ───────────────────────────────────────────────────────
+    # ── Styles for tables and checkboxes ────────────────────────────────────
+    tbl_hdr  = _ps("TblHdr",  fontName=f"{SANS}-Bold", fontSize=9,   leading=12,
+                               textColor=C_WHITE)
+    tbl_cell = _ps("TblCell", fontName=SANS,            fontSize=9,   leading=13,
+                               textColor=C_TEXT)
+    tbl_cell_sm = _ps("TblSm", fontName=SANS,           fontSize=8.5, leading=12,
+                               textColor=C_TEXT)
+    chk_sty  = _ps("Chk",     fontName=SANS,            fontSize=10.5, leading=16,
+                               textColor=C_TEXT, spaceAfter=3, leftIndent=16)
+
+    def _flush_table(raw_rows: list[str]) -> None:
+        """Parse buffered markdown table lines and append a styled ReportLab Table."""
+        parsed: list[list[str]] = []
+        for r in raw_rows:
+            if re.match(r"^\|[-| :]+\|$", r.strip()):
+                continue  # separator row
+            cells = [c.strip() for c in r.strip().strip("|").split("|")]
+            parsed.append(cells)
+        if not parsed:
+            return
+        n_cols = max(len(r) for r in parsed)
+        # Normalise column count
+        parsed = [r + [""] * (n_cols - len(r)) for r in parsed]
+        # Auto column widths: first col narrower, last col narrower for status cols
+        if n_cols == 3:
+            col_ws = [0.06 * CW, 0.56 * CW, 0.38 * CW]
+        elif n_cols == 2:
+            col_ws = [0.32 * CW, 0.68 * CW]
+        else:
+            unit = CW / n_cols
+            col_ws = [unit] * n_cols
+        # Build cell paragraphs
+        tbl_data: list[list] = []
+        for ri, row in enumerate(parsed):
+            style = tbl_hdr if ri == 0 else tbl_cell_sm
+            tbl_data.append([Paragraph(_md_to_rl(cell), style) for cell in row])
+        rl_tbl = Table(tbl_data, colWidths=col_ws, repeatRows=1)
+        ts = TableStyle([
+            ("BACKGROUND",    (0, 0), (-1, 0),   C_NAVY),
+            ("TEXTCOLOR",     (0, 0), (-1, 0),   C_WHITE),
+            ("FONTNAME",      (0, 0), (-1, 0),   f"{SANS}-Bold"),
+            ("ROWBACKGROUNDS",(0, 1), (-1, -1),  [C_WHITE, HexColor("#f1f5f9")]),
+            ("GRID",          (0, 0), (-1, -1),  0.4, C_BORDER),
+            ("TOPPADDING",    (0, 0), (-1, -1),  5),
+            ("BOTTOMPADDING", (0, 0), (-1, -1),  5),
+            ("LEFTPADDING",   (0, 0), (-1, -1),  7),
+            ("RIGHTPADDING",  (0, 0), (-1, -1),  7),
+            ("VALIGN",        (0, 0), (-1, -1),  "TOP"),
+        ])
+        rl_tbl.setStyle(ts)
+        story.append(rl_tbl)
+        story.append(Spacer(1, 0.1 * inch))
+
+    # ── Render content (with table buffering) ────────────────────────────────
+    table_buf: list[str] = []
+
+    def _maybe_flush():
+        if table_buf:
+            _flush_table(list(table_buf))
+            table_buf.clear()
+
     for line in content_lines:
         clean = line.strip()
+
+        # Table row detection
+        if clean.startswith("|"):
+            table_buf.append(clean)
+            continue
+        else:
+            _maybe_flush()
+
         if not clean:
             story.append(Spacer(1, 0.05 * inch))
             continue
@@ -601,6 +690,14 @@ def render_pdf_bytes(title: str, markdown_text: str) -> bytes:
             story.extend(_h2_row(clean[len(prefix):].strip()))
         elif clean.startswith("### "):
             story.append(Paragraph(_md_to_rl(clean[4:].strip()), h3_style))
+        elif re.match(r"^- \[[ xX]\]", clean):
+            # Checkbox bullet: - [ ] or - [x]
+            checked = bool(re.match(r"^- \[[xX]\]", clean))
+            text = _md_to_rl(re.sub(r"^- \[[ xX]\]\s*", "", clean))
+            box = '<font color="#1d4ed8" fontName="{f}-Bold">{s}</font>'.format(
+                f=SANS, s="☑" if checked else "☐"
+            )
+            story.append(Paragraph(f"{box}  {text}", chk_sty))
         elif clean.startswith("- ") or clean.startswith("* "):
             text = _md_to_rl(clean[2:].strip())
             story.append(Paragraph(
@@ -614,7 +711,6 @@ def render_pdf_bytes(title: str, markdown_text: str) -> bytes:
                     f'<font color="#1d4ed8" fontName="{SANS}-Bold">{n}.</font>  {cnt}', num_style,
                 ))
         elif clean.startswith('"') or clean.startswith('\u201c'):
-            # Quote box with gold left border via table
             q_tbl = Table([[Paragraph(_md_to_rl(clean), quote_sty)]], colWidths=[CW])
             q_tbl.setStyle(TableStyle([
                 ("BACKGROUND",   (0, 0), (-1, -1), HexColor("#fefce8")),
@@ -630,6 +726,7 @@ def render_pdf_bytes(title: str, markdown_text: str) -> bytes:
         else:
             story.append(Paragraph(_md_to_rl(clean), body_style))
 
+    _maybe_flush()
     story.append(Spacer(1, 0.3 * inch))
     doc_obj.build(story, onFirstPage=_draw_footer, onLaterPages=_draw_footer)
     return buf.getvalue()
