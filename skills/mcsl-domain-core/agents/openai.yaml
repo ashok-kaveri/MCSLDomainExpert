@@ -1,0 +1,3 @@
+display_name: MCSL Domain Core
+short_description: Shared PluginHive MCSL domain knowledge and research workflow for AC, TC, AI QA, automation, and handoff tasks.
+default_prompt: Answer this PluginHive MCSL question using local project knowledge first, detect the platform when relevant, browse official sources when local knowledge is missing or may be stale, and cite the sources used.

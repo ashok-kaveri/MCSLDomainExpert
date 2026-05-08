@@ -1278,6 +1278,44 @@ def test_auto01_no_api_key():
     assert result.pom_code == ""
 
 
+def test_auto01_non_shopify_platform_skips_automation_before_llm():
+    """Automation asks for QA confirmation before running BigCommerce cards through Shopify flow."""
+    from unittest.mock import patch
+    from pipeline.automation_writer import write_automation
+
+    with patch("pipeline.automation_writer.ChatAnthropic") as mock_llm:
+        result = write_automation(
+            feature_name="Custom BigCommerce theme blocking shipping rate display",
+            test_cases_markdown="### TC-1: Verify BigCommerce checkout rates\n**Type:** Positive",
+    )
+
+    assert result.skipped is True
+    assert "Ask QA" in result.error
+    assert "BigCommerce" in result.error
+    mock_llm.assert_not_called()
+
+
+def test_smart_ai_qa_non_shopify_returns_manual_block():
+    """AI QA asks QA before executing a non-Shopify reported card through Shopify flow."""
+    from pipeline.smart_ac_verifier import verify_test_cases
+
+    report = verify_test_cases(
+        "### TC-1: Verify BigCommerce checkout rates\n"
+        "**Type:** Positive\n"
+        "**Priority:** High\n"
+        "**Preconditions:** BigCommerce store with FedEx configured\n"
+        "**Steps:**\n"
+        "Given BigCommerce checkout is open\n"
+        "When rates are requested\n"
+        "Then FedEx rates should appear\n",
+        card_name="ZI-360 BigCommerce checkout rates",
+    )
+
+    assert report.summary["qa_needed"] == 1
+    assert "Ask QA" in report.scenarios[0].finding
+    assert "BigCommerce" in report.scenarios[0].qa_question
+
+
 # ---------------------------------------------------------------------------
 # AUTO-02: explore_feature() — Chrome Agent ExplorationResult
 # ---------------------------------------------------------------------------
@@ -1484,12 +1522,16 @@ def test_sheets_writer_lists_live_tabs_from_configured_sheet():
     assert tabs == ["MCSL Master", "Shipping Labels"]
 
 
-def test_dashboard_uses_live_sheet_tab_options_helper():
-    """Dashboard publish selectors should use the live sheet tab helper."""
+def test_dashboard_uses_release_derived_sheet_tab():
+    """Dashboard publish flow derives the sheet tab from the release label, not keyword detection."""
     src = Path("pipeline_dashboard.py").read_text(encoding="utf-8")
 
-    assert "_live_publish_tabs = _sheet_tab_options()" in src
-    assert "_live_approval_tabs = _sheet_tab_options()" in src
+    # Tab is now derived from the release label, not from detect_tab() or a live tab selectbox
+    assert "detect_tab" not in src
+    assert '.replace("PROD ", "").replace("SL: ", "").strip()' in src
+    # Auto-creates the tab before appending
+    assert "create_new_tab(_selected_publish_tab)" in src
+    assert "create_new_tab(_selected_tab)" in src
 
 
 def test_dashboard_ai_qa_bug_review_has_fedex_style_controls():

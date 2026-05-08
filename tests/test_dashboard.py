@@ -314,6 +314,35 @@ def test_collect_release_spec_map_prefers_session_then_history():
     }
 
 
+def test_restore_card_history_state_rehydrates_published_tc_and_ai_qa_context():
+    import pipeline_dashboard as pd
+    from unittest.mock import patch
+
+    session_state = {}
+
+    with patch.object(pd.st, "session_state", session_state):
+        pd._restore_card_history_state(
+            "c1",
+            {
+                "tc_published_at": "2026-05-05T10:00:00Z",
+                "ai_qa_evidence": "AI QA evidence summary",
+            },
+        )
+
+    assert session_state["tc_saved_c1"] is True
+    assert session_state["sav_context_c1"] == "AI QA evidence summary"
+
+
+def test_ui10d_loaded_card_subset_editor_is_available_across_tabs():
+    import pipeline_dashboard as pd
+    import inspect
+
+    src = inspect.getsource(pd)
+    assert "rqa_all_cards" in src
+    assert "rqa_active_cards_" in src
+    assert "Apply subset" in src
+
+
 def test_ui09_release_run_has_fedex_parity_scope_and_fallbacks():
     import pipeline_dashboard as pd
     import inspect

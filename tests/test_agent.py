@@ -280,6 +280,36 @@ def test_plan_scenario_injects_carrier():
     )
     assert isinstance(result, dict)
     assert result.get("carrier") == "FedEx"
+    assert result.get("carrier_code") == "C2"
+
+
+def test_plan_scenario_normalizes_navigation_aliases():
+    """AI QA planning should map QA/model wording to supported MCSL nav keys."""
+    from pipeline.smart_ac_verifier import _normalise_nav_destination, _plan_scenario
+    from unittest.mock import MagicMock
+
+    assert _normalise_nav_destination("All Products") == "appproducts"
+    assert _normalise_nav_destination("Shipping") == "orders"
+    assert _normalise_nav_destination("Rate Automation") == "shippingrates"
+
+    mock_claude = MagicMock()
+    mock_claude.invoke.return_value.content = """{
+        "nav_clicks": ["Shipping", "All Products", "Rate Automation"],
+        "look_for": ["rule updated"],
+        "api_to_watch": [],
+        "order_action": "none",
+        "plan": "Open app areas"
+    }"""
+
+    result = _plan_scenario(
+        scenario="Update rate automation for product dimensions",
+        app_url="https://admin.shopify.com/store/test-store/apps/mcsl-qa",
+        code_ctx="",
+        expert_insight="",
+        claude=mock_claude,
+    )
+
+    assert result["nav_clicks"] == ["orders", "appproducts", "shippingrates", "automation"]
 
 
 def test_order_creator(tmp_path):

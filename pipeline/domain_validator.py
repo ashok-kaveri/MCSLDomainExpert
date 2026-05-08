@@ -314,7 +314,7 @@ VALIDATION_PROMPT = dedent("""\
 """)
 
 VALIDATION_FIX_PROMPT = dedent("""\
-    You are a senior domain expert for the MCSL Shopify app.
+    You are a senior domain expert for PluginHive MCSL across Shopify, WooCommerce, BigCommerce, Magento, and PrestaShop.
 
     Rewrite the acceptance criteria below using the validation report.
 
@@ -324,6 +324,7 @@ VALIDATION_FIX_PROMPT = dedent("""\
     - Preserve correct details already present.
     - Keep all scenarios testable through the MCSL app/UI/API flow.
     - Do not invent unsupported carrier rules.
+    - Preserve the platform named by the card or AC. If no platform is explicit, default QA/support wording to Shopify.
     - Do not add mobile / responsive / viewport scenarios.
 
     Card Name:
@@ -373,7 +374,7 @@ VALIDATION_JSON_REPAIR_PROMPT = dedent("""\
 """)
 
 VALIDATION_MINIMAL_RETRY_PROMPT = dedent("""\
-    You are a QA domain validator for the MCSL Shopify app.
+    You are a QA domain validator for PluginHive MCSL across Shopify, WooCommerce, BigCommerce, Magento, and PrestaShop.
 
     Return ONLY one valid JSON object in this exact schema:
     {{

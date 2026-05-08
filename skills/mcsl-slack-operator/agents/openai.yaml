@@ -1,0 +1,3 @@
+name: mcsl-slack-operator
+description: Read Slack channels and threads, search users, send DMs, channel posts, and replies using MCSL project credentials.
+instructions: ../SKILL.md

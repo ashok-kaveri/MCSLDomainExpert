@@ -1,0 +1,3 @@
+name: mcsl-rag-sync
+description: Pull latest and safely sync/reindex MCSL RAG knowledge for StorePep server/client, automation, wiki, or full knowledge.
+instructions: ../SKILL.md

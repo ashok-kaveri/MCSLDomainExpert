@@ -8,8 +8,50 @@ from dataclasses import dataclass, field
 
 import config
 from pipeline.carrier_knowledge import detect_carrier_scope
+from pipeline.card_processor import detect_platform_scope
 
 logger = logging.getLogger(__name__)
+
+
+STANDARD_MCSL_NAVIGATION: tuple[str, ...] = (
+    "Open Shopify Admin > Apps > PH Multi Carrier Shipping Label App.",
+    "Use ORDERS for order summary, label generation, request logs, tracking, and report-related checks.",
+    "Use the hamburger menu for Products, Carriers, General Settings, packaging, and automation-rule setup.",
+    "Use Shopify Admin Orders or Products for cross-checking sync, fulfillment, tracking, and product source data.",
+)
+
+PLATFORM_NAVIGATION: dict[str, tuple[str, ...]] = {
+    "Shopify": (
+        "Shopify Admin > Apps > PH Multi Carrier Shipping Label App",
+        "Shopify Admin Orders or Products for cross-checking Shopify source data",
+    ),
+    "WooCommerce": (
+        "WordPress Admin / WooCommerce store admin > PluginHive MCSL app/settings",
+        "WooCommerce Orders or Products for cross-checking WooCommerce source data",
+    ),
+    "BigCommerce": (
+        "BigCommerce admin/storefront checkout and the BigCommerce MCSL app/settings",
+        "BigCommerce Orders, Products, checkout, or rate automation logs for cross-checking source data",
+    ),
+    "Magento": (
+        "Magento admin > PluginHive Multi Carrier Shipping Label extension/settings",
+        "Magento Orders, Products, checkout, or shipping logs for cross-checking source data",
+    ),
+    "PrestaShop": (
+        "PrestaShop admin > PluginHive Multi Carrier Shipping Label module/settings",
+        "PrestaShop Orders, Products, checkout, or shipping logs for cross-checking source data",
+    ),
+}
+
+REQUEST_LOG_CALLOUT_RE = re.compile(
+    r"^[-*]\s*(?:Request node|Request nodes|Request/response nodes|Request/log fields) to verify:",
+    flags=re.IGNORECASE,
+)
+
+
+def is_request_log_callout(markdown_line: str) -> bool:
+    """Return true when a markdown bullet should render as a request/log callout."""
+    return bool(REQUEST_LOG_CALLOUT_RE.match((markdown_line or "").strip()))
 
 
 @dataclass
@@ -20,6 +62,8 @@ class HandoffDocContext:
     release_name: str = ""
     approved_at: str = ""
     card_description: str = ""
+    card_comments: list[str] = field(default_factory=list)
+    card_checklists: list[dict] = field(default_factory=list)
     acceptance_criteria: str = ""
     test_cases: str = ""
     ai_qa_summary: str = ""
@@ -29,6 +73,7 @@ class HandoffDocContext:
     tester_names: list[str] = field(default_factory=list)
     toggle_names: list[str] = field(default_factory=list)
     carrier_names: list[str] = field(default_factory=list)
+    platform_names: list[str] = field(default_factory=list)
     likely_navigation: list[str] = field(default_factory=list)
     generated_on: str = field(default_factory=lambda: _dt.datetime.now().strftime("%Y-%m-%d %H:%M"))
 
@@ -56,9 +101,10 @@ def split_card_members(members: list[dict]) -> tuple[list[str], list[str]]:
 
 def detect_toggles(*texts: str) -> list[str]:
     patterns = [
-        r"\btoggle\b[:\s-]*([A-Za-z0-9 _-]+)",
-        r"\bfeature flag\b[:\s-]*([A-Za-z0-9 _-]+)",
-        r"\brollout\b[:\s-]*([A-Za-z0-9 _-]+)",
+        r"[`\"“”']?([A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)+)[`\"“”']?\s*:\s*(?:true|false)",
+        r"\btoggle\b\s*[:=-]\s*([A-Za-z0-9_. -]+)",
+        r"\bfeature flag\b\s*[:=-]\s*([A-Za-z0-9_. -]+)",
+        r"\brollout\b\s*[:=-]\s*([A-Za-z0-9_. -]+)",
     ]
     found: list[str] = []
     for text in texts:
@@ -77,6 +123,11 @@ def detect_carriers(*texts: str) -> list[str]:
 def infer_navigation(*texts: str) -> list[str]:
     combined = " ".join(texts).lower()
     nav: list[str] = []
+    platforms = detect_platform_scope(*texts)
+    for platform in platforms:
+        for item in PLATFORM_NAVIGATION.get(platform, ()):
+            if item not in nav:
+                nav.append(item)
     if any(token in combined for token in ("order", "label generated", "fulfill", "mark as shipped")):
         nav.append("ORDERS tab -> open order -> Prepare Shipment / Generate Label")
     if any(token in combined for token in ("label", "print documents", "tracking", "manifest")) and "ORDERS tab -> open order -> Prepare Shipment / Generate Label" not in nav:
@@ -91,11 +142,27 @@ def infer_navigation(*texts: str) -> list[str]:
         nav.append("Hamburger menu -> Settings / Packaging")
     if any(token in combined for token in ("rate", "checkout", "automation rule", "service selection", "request log")):
         nav.append("Hamburger menu -> Settings / Shipping Rates / Automation or Request Log")
-    if any(token in combined for token in ("shopify", "product_id", "variant_id", "tracking number")):
+    if "Shopify" in platforms or any(token in combined for token in ("shopify", "product_id", "variant_id", "tracking number")):
         nav.append("Shopify Admin -> Orders or Products for post-verification")
     if not nav:
-        nav.append("MCSL embedded app main flow via ORDERS, LABELS, PICKUP, or hamburger settings")
+        nav.append("Shopify Admin > Apps > PH Multi Carrier Shipping Label App")
     return nav
+
+
+def _checklists_to_text(checklists: list[dict] | None) -> str:
+    lines: list[str] = []
+    for checklist in checklists or []:
+        if not isinstance(checklist, dict):
+            continue
+        name = (checklist.get("name") or "").strip()
+        if name:
+            lines.append(name)
+        for item in checklist.get("items", []) or []:
+            item_name = (item.get("name") or "").strip()
+            if item_name:
+                state = (item.get("state") or "").strip()
+                lines.append(f"- {item_name}" + (f" [{state}]" if state else ""))
+    return "\n".join(lines)
 
 
 def build_handoff_context(
@@ -112,9 +179,39 @@ def build_handoff_context(
 ) -> HandoffDocContext:
     devs, testers = split_card_members(members or [])
     desc = getattr(card, "desc", "") or ""
-    toggles = detect_toggles(desc, getattr(card, "name", "") or "", acceptance_criteria, test_cases)
-    carriers = detect_carriers(desc, getattr(card, "name", "") or "", acceptance_criteria, test_cases, ai_qa_summary, ai_qa_evidence)
-    navigation = infer_navigation(desc, getattr(card, "name", "") or "", acceptance_criteria, test_cases, ai_qa_summary, ai_qa_evidence)
+    comments = [c for c in (getattr(card, "comments", []) or []) if c]
+    checklists = getattr(card, "checklists", []) or []
+    comments_text = "\n".join(comments)
+    checklist_text = _checklists_to_text(checklists)
+    evidence_text = "\n".join([comments_text, checklist_text]).strip()
+    toggles = detect_toggles(desc, getattr(card, "name", "") or "", acceptance_criteria, test_cases, evidence_text)
+    carriers = detect_carriers(
+        desc,
+        getattr(card, "name", "") or "",
+        acceptance_criteria,
+        test_cases,
+        ai_qa_summary,
+        ai_qa_evidence,
+        evidence_text,
+    )
+    platforms = detect_platform_scope(
+        desc,
+        getattr(card, "name", "") or "",
+        acceptance_criteria,
+        test_cases,
+        ai_qa_summary,
+        ai_qa_evidence,
+        evidence_text,
+    )
+    navigation = infer_navigation(
+        desc,
+        getattr(card, "name", "") or "",
+        acceptance_criteria,
+        test_cases,
+        ai_qa_summary,
+        ai_qa_evidence,
+        evidence_text,
+    )
     return HandoffDocContext(
         card_id=getattr(card, "id", ""),
         card_name=getattr(card, "name", ""),
@@ -122,6 +219,8 @@ def build_handoff_context(
         release_name=release_name,
         approved_at=approved_at,
         card_description=desc,
+        card_comments=comments,
+        card_checklists=checklists,
         acceptance_criteria=acceptance_criteria or desc,
         test_cases=test_cases,
         ai_qa_summary=ai_qa_summary,
@@ -131,55 +230,71 @@ def build_handoff_context(
         tester_names=testers,
         toggle_names=toggles,
         carrier_names=carriers,
+        platform_names=platforms,
         likely_navigation=navigation,
     )
 
 
-_SUPPORT_PROMPT = """You are writing a detailed QA & support handoff document for an MCSL Shopify shipping feature.
+_SUPPORT_PROMPT = """You are writing a support-ready story-card guide for PluginHive MCSL across Shopify, WooCommerce, BigCommerce, Magento, and PrestaShop.
 
-This document is used internally by QA engineers, support staff, and account managers. \
-It should read like a polished product release guide — structured, scenario-rich, and immediately actionable.
+This document is used internally by support, QA, account managers, and escalation owners. \
+It should match the MCSL 378 Support Guide style: practical, support-facing, card-specific, \
+and written so a support engineer can explain, verify, and escalate the change without reading code.
 
 Use this EXACT section order — no other sections:
 
-1. `# <Feature Name>` — short descriptive title only (no "Support Guide" prefix)
-2. `## The Problem` — 3-5 short bullet points describing the merchant pain \
-   before this feature. Each bullet: one concrete frustration. No paragraphs.
-3. `## The Solution` — one-paragraph overview of what the feature does, followed by \
-   a `### <Capability Name>` subsection for EACH major capability. \
-   Each subsection: 1-2 sentences describing what it does and when a merchant uses it.
-4. `## Key Benefits` — markdown table with two columns: **Benefit** and **Description**. \
-   5-6 rows. Each row: one clear, merchant-facing gain (speed, accuracy, continuity, etc.).
-5. `## User Story` — one sentence starting with a double-quote: \
-   `"As a merchant using the MCSL app, I want to..."`
-6. `## How to Use` — numbered steps (1 through N) describing the end-to-end flow \
-   a merchant follows to use this feature. Use MCSL app navigation paths. Keep each step tight.
-7. `## Test Scenarios` — ALL test cases from the context formatted as grouped markdown tables. \
-   Group by logical area (e.g. Order ID Filter, Date Filter, Combination Tests). \
-   Each group: a `### [Group Name]` heading followed by a markdown table with columns: \
-   `| # | Scenario | Expected Result |`. \
-   Derive scenario rows from the test cases in the context. Include ALL of them — do not summarise.
-8. `## Acceptance Criteria Checklist` — every acceptance criterion as a checkbox bullet: \
-   `- [ ] <criterion text>`. One item per line. Cover all ACs from the context.
+1. `# Support Guide: <Story ID or concise feature name>`
+2. `<Original card title>` as a short subtitle line below the title when available.
+3. `## Feature Summary` — 1 concise paragraph explaining what changed, why it matters, \
+   and the affected carrier/product area. Keep it support-facing, not marketing-heavy.
+4. `## Toggles & Prerequisites` — markdown table with columns \
+   `| Toggle / config note | What support should confirm |`. \
+   Include detected toggles, release/store prerequisites, carrier account/service prerequisites, \
+   detected customer/test platform, and "None detected" only if nothing is known.
+5. `## Step-by-Step Support Walkthrough` — numbered support steps to verify or explain the feature. \
+   Include the exact app area/path inside the relevant step, such as ORDERS, hamburger menu > Carriers, \
+   hamburger menu > Products, Reports, Shopify Admin Orders/Products, WooCommerce Orders/Products, \
+   BigCommerce Orders/Products/checkout/rate automation, Magento Orders/Products, PrestaShop Orders/Products, \
+   checkout, or request logs. \
+   Use the customer/test platform from the card/ticket. Do not default to Shopify Admin when WooCommerce, \
+   BigCommerce, Magento, or PrestaShop is detected; if the implementation is shared, say support is validating it on the reported platform. \
+   Do not add a separate generic `Where to Find This in MCSL` section.
+   If the card requires payload, carrier request, response, or diagnostic log verification, add a highlighted \
+   bullet immediately after the relevant step using one of these exact labels: \
+   `- Request node to verify: ...`, `- Request nodes to verify: ...`, \
+   `- Request/response nodes to verify: ...`, or `- Request/log fields to verify: ...`.
+6. `## Expected Behaviour` — markdown table with columns \
+   `| What support should observe | How to confirm |`. \
+   Include UI result, request/log result, document/report result, or sync result when supported by context.
+   Include exact request/log node names when the card or QA evidence requires payload verification.
+7. `## Merchant-Safe Explanation` — 1 short paragraph translating the change into merchant-friendly language. \
+   Do not expose internal implementation details unless the merchant must know a toggle/config name.
+8. `## Common Questions & Troubleshooting` — bullets. Include what to check first, when to inspect logs, \
+   and when to escalate. Do not invent limitations.
+9. `## Support Escalation Packet` — bullets containing:
+   - Story card and Trello URL
+   - Store URL, account UUID, carrier account, order number, and generated label/tracking/report identifier
+   - Screenshots of setup page and request/log evidence when carrier behavior is involved
+   - Exact toggle/config value if gated
 
 Formatting rules:
-- Use markdown tables with pipe syntax — header row, separator row (|---|---|), then data rows
-- Use `### Scenario N: <name>` format only under The Solution — not elsewhere
-- Never use giant paragraphs — prefer bullets, numbered lists, and tables
-- Mention MCSL navigation paths naturally (ORDERS tab, hamburger menu → Carriers, etc.)
-- Call out carrier names explicitly when the feature is carrier-specific
-- DO NOT add: Key Findings, AI Code Analysis, Troubleshooting Notes, Limitations, Rollout Notes, References
-- Use facts from the context only. Do not invent test cases or ACs not present in the context.
+- Use markdown tables with pipe syntax — header row, separator row (|---|---|), then data rows.
+- Never use giant paragraphs — prefer bullets, numbered lists, and tables.
+- Mention MCSL navigation paths naturally: ORDERS tab, hamburger menu > Products, hamburger menu > Carriers, etc.
+- Call out carrier names explicitly when the feature is carrier-specific.
+- DO NOT add: The Problem, The Solution, Key Benefits, User Story, Test Scenarios, Acceptance Criteria Checklist, \
+  AI Code Analysis, Rollout Notes, or References.
+- Use facts from the context only. If a detail is missing, phrase it as "Confirm from live store/card context" rather than inventing.
 
 CONTEXT:
 {context}
 """
 
 
-_BUSINESS_PROMPT = """You are writing a customer-facing, marketing-style Business Brief for a new feature in the MCSL \
-(Multi-Carrier Shipping Labels) Shopify app by PluginHive.
+_BUSINESS_PROMPT = """You are writing a customer-facing, marketing-style Business Brief for a new feature in PluginHive MCSL \
+(Multi-Carrier Shipping Labels) across Shopify, WooCommerce, BigCommerce, Magento, and PrestaShop.
 
-Your audience is Shopify merchants, e-commerce store owners, account managers, and product marketing — \
+Your audience is merchants on the platform identified by the card/ticket, e-commerce store owners, account managers, and product marketing — \
 NOT engineers or QA teams. Write as if this will appear on a product update page or be shared with a customer \
 success manager explaining the release to a merchant.
 
@@ -211,6 +326,8 @@ Rules:
 - Never mention internal QA terms (acceptance criteria, test cases, fallback, regression)
 - Use merchant-friendly language throughout: "you can now", "your labels", "your store"
 - If the feature is carrier-specific, say the carrier name naturally ("FedEx" not "FedEx REST endpoint")
+- If the card/ticket is WooCommerce, BigCommerce, Magento, or PrestaShop, do not call the audience Shopify merchants or give Shopify Admin setup steps.
+- If the implementation is shared but the customer card is platform-specific, describe the benefit for that reported platform and avoid unsupported cross-platform promises.
 - Keep the whole document skimmable and upbeat
 
 Use facts from the context only. Do not invent features or scenarios not supported by the context.
@@ -221,6 +338,7 @@ CONTEXT:
 
 
 def _context_text(ctx: HandoffDocContext) -> str:
+    checklist_text = _checklists_to_text(ctx.card_checklists)
     parts = [
         f"Card: {ctx.card_name}",
         f"Card URL: {ctx.card_url or '(none)'}",
@@ -230,11 +348,18 @@ def _context_text(ctx: HandoffDocContext) -> str:
         f"Tested by: {', '.join(ctx.tester_names) if ctx.tester_names else 'QA Team'}",
         f"Toggles: {', '.join(ctx.toggle_names) if ctx.toggle_names else 'None detected'}",
         f"Carriers: {', '.join(ctx.carrier_names) if ctx.carrier_names else 'Carrier-neutral or not explicitly stated'}",
+        f"Customer/test platform: {', '.join(ctx.platform_names) if ctx.platform_names else 'Shopify'}",
         "Likely MCSL navigation:",
         "\n".join(f"- {item}" for item in (ctx.likely_navigation or [])),
         "",
         "CARD DESCRIPTION / CURRENT AC:",
         (ctx.acceptance_criteria or ctx.card_description or "").strip()[:7000],
+        "",
+        "LIVE TRELLO COMMENTS / QA NOTES:",
+        ("\n\n".join(ctx.card_comments or []) or "None").strip()[:7000],
+        "",
+        "LIVE TRELLO CHECKLISTS:",
+        (checklist_text or "None").strip()[:3000],
         "",
         "TEST CASES:",
         (ctx.test_cases or "").strip()[:6000],
@@ -268,75 +393,144 @@ def _invoke_doc_prompt(prompt: str, ctx: HandoffDocContext) -> str:
     return content.strip()
 
 
+def _standard_navigation_markdown(extra_navigation: list[str] | None = None) -> str:
+    # The release support guide uses one fixed app-orientation block. Keep
+    # carrier/card-specific paths in the walkthrough so this section stays
+    # predictable across all cards.
+    return "\n".join(f"- {item}" for item in STANDARD_MCSL_NAVIGATION)
+
+
+def _enforce_standard_navigation(markdown_text: str, ctx: HandoffDocContext) -> str:
+    """Remove the old generic MCSL location block from support guides.
+
+    Card-specific navigation belongs in the walkthrough, where support sees it
+    next to the action they need to perform.
+    """
+    if not markdown_text or "## Where to Find This in MCSL" not in markdown_text:
+        return markdown_text
+
+    pattern = re.compile(
+        r"(## Where to Find This in MCSL\s*\n)(.*?)(?=\n## (?:Step-by-Step Support Walkthrough|Expected Behaviour|Merchant-Safe Explanation|Common Questions & Troubleshooting|Support Escalation Packet)\b)",
+        flags=re.DOTALL,
+    )
+    sanitized, count = pattern.subn("", markdown_text, count=1)
+    if not count:
+        logger.warning("Could not remove generic navigation block for %s", ctx.card_name)
+    return sanitized
+
+
+def _enforce_toggle_scope(markdown_text: str, ctx: HandoffDocContext) -> str:
+    if ctx.toggle_names:
+        return markdown_text
+
+    sanitized = markdown_text
+    sanitized = re.sub(
+        r"^\|\s*(?:None detected|No feature toggle(?: found in card notes)?\.?)\s*\|\s*Use live MCSL store/account state as the source of truth\.?\s*\|\s*$",
+        "| No toggle | No feature toggle is required for this card; validate release deployment, carrier/account setup, and card-specific prerequisites only. |",
+        sanitized,
+        flags=re.MULTILINE,
+    )
+    sanitized = re.sub(
+        r"^\s*[-*]\s*Use live MCSL store/account state as the source of truth when a toggle is mentioned\.?\s*$\n?",
+        "",
+        sanitized,
+        flags=re.MULTILINE,
+    )
+    sanitized = re.sub(
+        r"^\s*[-*]\s*Exact toggle/config value if (?:the feature is )?gated\.?\s*$\n?",
+        "",
+        sanitized,
+        flags=re.MULTILINE,
+    )
+    sanitized = sanitized.replace(
+        "first confirm release, store/account, carrier account, and toggle/config state",
+        "first confirm release, store/account, carrier account, and card-specific prerequisites",
+    )
+    return sanitized
+
+
+def _enforce_support_doc_guardrails(markdown_text: str, ctx: HandoffDocContext) -> str:
+    return _enforce_toggle_scope(_enforce_standard_navigation(markdown_text, ctx), ctx)
+
+
 def _fallback_support_doc(ctx: HandoffDocContext) -> str:
     carriers = ", ".join(ctx.carrier_names) if ctx.carrier_names else "carrier-neutral"
+    platform_scope = ", ".join(ctx.platform_names) if ctx.platform_names else "Shopify"
     nav_steps = ctx.likely_navigation or ["MCSL embedded app main flow"]
-    nav_numbered = "\n".join(f"{i+1}. {item}" for i, item in enumerate(nav_steps))
-    ac_lines = ""
-    if ctx.acceptance_criteria:
-        for line in ctx.acceptance_criteria.splitlines():
-            s = line.strip().lstrip("-").lstrip("*").strip()
-            if s and not s.startswith("#"):
-                ac_lines += f"- [ ] {s}\n"
-    if not ac_lines:
-        ac_lines = "- [ ] Verify feature behaves as described in the approved card scope\n"
+    story_id_match = re.search(r"\b([A-Z]{1,4}-\d{1,5})\b", ctx.card_name or "")
+    story_label = story_id_match.group(1) if story_id_match else ctx.card_name
+    if ctx.toggle_names:
+        toggle_rows = "\n".join(
+            f"| {toggle} | Confirm the exact value is enabled for the target store/account before testing. |"
+            for toggle in ctx.toggle_names
+        )
+        toggle_troubleshooting = "- If the behavior is not visible, first confirm release, store/account, carrier account, and toggle/config state."
+        toggle_escalation = "\n- Exact toggle/config value."
+    else:
+        toggle_rows = "| No toggle | No feature toggle is required for this card; validate release deployment, carrier/account setup, and card-specific prerequisites only. |"
+        toggle_troubleshooting = "- If the behavior is not visible, first confirm release, store/account, carrier account, and card-specific prerequisites."
+        toggle_escalation = ""
     return f"""# {ctx.card_name}
 
-## The Problem
-- Merchants struggled to complete this workflow without errors or manual workarounds
-- The existing flow lacked the capability described in this feature
-- {carriers} users were particularly impacted when performing related operations
-- No built-in mechanism existed to handle the scenario covered by this update
+## Support Guide: {story_label}
 
-## The Solution
-This update introduces the capability described in the card scope, making the workflow faster and more reliable for merchants using {carriers} through the MCSL app.
+{ctx.card_name}
 
-{nav_numbered}
+## Feature Summary
+This update covers the approved card scope for {carriers} behaviour in MCSL. Support should verify it on the customer/test platform from the card: {platform_scope}. Use the card details, approved AC, test evidence, and live store state to explain or verify the visible merchant outcome.
 
-## Key Benefits
+## Toggles & Prerequisites
 
-| Benefit | Description |
-|---------|-------------|
-| Accuracy | Results match exactly what was requested — no false positives |
-| Speed | The operation completes without noticeable delay or page reload |
-| Reliability | Existing workflows and configurations are fully preserved |
-| Clarity | The UI makes the current state immediately visible |
-| Safety | No regressions introduced to adjacent features |
+| Toggle / config note | What support should confirm |
+|---|---|
+{toggle_rows}
+| Release | Confirm the merchant store/account is on {ctx.release_name or 'the target release'} before promising the behavior. |
+| Platform | {platform_scope}. If the implementation is shared across MCSL platforms, validate on the customer-reported platform unless the card asks for broader coverage. |
+| Carrier/account | Confirm the exact carrier account, service, and order data before testing carrier-specific behavior. |
 
-## User Story
+## Step-by-Step Support Walkthrough
 
-"As a merchant using the MCSL app, I want to use this feature so that I can complete my shipping workflow faster and with fewer errors."
+1. Confirm the merchant store, platform, release, carrier account, and order/product/report context.
+2. Open the relevant MCSL area: {nav_steps[0]}.
+3. Reproduce the workflow described in the approved card scope.
+4. Check the visible UI result and any request/log, document, tracking, sync, or report evidence.
+5. Capture the escalation details below if the expected behaviour is not observed.
 
-## How to Use
+## Expected Behaviour
 
-1. Open the MCSL app from your Shopify Admin panel
-2. Navigate to the relevant section: {nav_steps[0]}
-3. Locate the new capability as described in the card scope
-4. Apply or configure it according to your store's requirements
-5. Verify the outcome matches the expected behaviour described in the acceptance criteria
+| What support should observe | How to confirm |
+|---|---|
+| The feature behaves as described in the approved card scope. | Compare the live UI result with the approved AC and AI QA evidence. |
+| Existing related MCSL workflows continue to work. | Run the adjacent order/product/carrier flow noted in the card context. |
 
-## Test Scenarios
+## Merchant-Safe Explanation
 
-### Core Scenarios
+You can explain this as an MCSL release improvement for the affected carrier or product workflow. The merchant should not need internal implementation details; translate the change into the visible setup or result described above.
 
-| # | Scenario | Expected Result |
-|---|----------|-----------------|
-| 1 | Feature used with valid inputs | Expected outcome displayed correctly |
-| 2 | Feature used with invalid or empty inputs | Empty state or error shown gracefully |
-| 3 | Feature combined with existing related functionality | No regression; both work correctly |
+## Common Questions & Troubleshooting
 
-## Acceptance Criteria Checklist
+{toggle_troubleshooting}
+- If carrier behavior is involved, inspect the request and response logs before escalating.
+- If sync behavior is involved, compare MCSL with the detected platform's Orders or Products source data.
+- If only one order/product fails, capture that exact record before treating it as a release-wide issue.
 
-{ac_lines.strip()}
+## Support Escalation Packet
+
+- Story card: {story_label} - {ctx.card_name}
+- Trello URL: {ctx.card_url or 'Confirm from card context'}
+- Store URL, account UUID, carrier account, order number, and generated label/tracking/report identifier.
+- Screenshots of the setup page and request/log evidence whenever carrier behavior is involved.
+{toggle_escalation}
 """
 
 
 def _fallback_business_doc(ctx: HandoffDocContext) -> str:
     carriers = ", ".join(ctx.carrier_names) if ctx.carrier_names else "all supported carriers"
+    platform_merchants = ", ".join(ctx.platform_names) + " merchants" if ctx.platform_names else "MCSL merchants"
     return f"""# What's New: {ctx.card_name}
 
 ## The Problem We Solved
-Merchants using {carriers} through the MCSL app previously encountered a limitation in this area. \
+{platform_merchants} using {carriers} through the MCSL app previously encountered a limitation in this area. \
 This update removes that blocker so your store can ship more smoothly without workarounds.
 
 ## What You Can Do Now
@@ -355,12 +549,12 @@ For stores processing many orders per day, this update eliminates a manual worka
 reducing the chance of errors and speeding up fulfilment.
 
 ## Who Benefits
-- Shopify merchants using {carriers} for shipping
+- {platform_merchants} using {carriers} for shipping
 - Stores that previously hit errors or limitations in this label flow
 - Merchants looking for a smoother, more reliable shipping experience
 
 ## How to Get Started
-1. Open the MCSL app from your Shopify admin
+1. Open the MCSL app/settings from the platform used by this store
 2. Navigate to the relevant settings area for your carrier
 3. Configure the new option to match your shipping setup
 4. Generate a label from the ORDERS tab to verify everything works
@@ -375,10 +569,10 @@ reducing the chance of errors and speeding up fulfilment.
 
 def generate_support_guide(ctx: HandoffDocContext) -> str:
     try:
-        return _invoke_doc_prompt(_SUPPORT_PROMPT, ctx)
+        return _enforce_support_doc_guardrails(_invoke_doc_prompt(_SUPPORT_PROMPT, ctx), ctx)
     except Exception as exc:
         logger.warning("Support guide generation fell back to template: %s", exc)
-        return _fallback_support_doc(ctx)
+        return _enforce_support_doc_guardrails(_fallback_support_doc(ctx), ctx)
 
 
 def generate_business_brief(ctx: HandoffDocContext) -> str:
@@ -387,6 +581,95 @@ def generate_business_brief(ctx: HandoffDocContext) -> str:
     except Exception as exc:
         logger.warning("Business brief generation fell back to template: %s", exc)
         return _fallback_business_doc(ctx)
+
+
+def _doc_title(ctx: HandoffDocContext) -> str:
+    story_id_match = re.search(r"\b([A-Z]{1,4}-\d{1,5})\b", ctx.card_name or "")
+    return story_id_match.group(1) if story_id_match else (ctx.card_name or ctx.card_id or "Card")
+
+
+def _demote_markdown(markdown_text: str) -> str:
+    """Nest a single-card document under a release-level package heading."""
+    lines: list[str] = []
+    for raw in (markdown_text or "").splitlines():
+        line = raw.rstrip()
+        if line.startswith("### "):
+            lines.append("#### " + line[4:].strip())
+        elif line.startswith("## "):
+            lines.append("### " + line[3:].strip())
+        elif line.startswith("# "):
+            lines.append("## " + line[2:].strip())
+        else:
+            lines.append(line)
+    return "\n".join(lines).strip()
+
+
+def _release_summary_table(contexts: list[HandoffDocContext]) -> str:
+    rows = [
+        "| Story / card | Platform | Carrier scope | Toggle / prerequisite signal |",
+        "|---|---|---|---|",
+    ]
+    for ctx in contexts:
+        platforms = ", ".join(ctx.platform_names) if ctx.platform_names else "Shopify"
+        carriers = ", ".join(ctx.carrier_names) if ctx.carrier_names else "Carrier-neutral"
+        toggles = ", ".join(ctx.toggle_names) if ctx.toggle_names else "None detected"
+        rows.append(f"| {_doc_title(ctx)} | {platforms} | {carriers} | {toggles} |")
+    return "\n".join(rows)
+
+
+def generate_combined_support_guide(contexts: list[HandoffDocContext], release_name: str = "") -> str:
+    """Generate one release-level Support Guide containing all selected cards."""
+    contexts = [ctx for ctx in contexts if ctx]
+    release = release_name or (contexts[0].release_name if contexts else "") or "MCSL Release"
+    parts = [
+        f"# {release} Support Guide",
+        "",
+        "## Included Story Cards",
+        _release_summary_table(contexts),
+        "",
+        "## How Support Should Use This Package",
+    "- Use each card section as the support/demo guide for that feature.",
+        "- Confirm customer/test platform, live store, carrier account, order/product, and toggle state before promising behavior.",
+        "- Capture the escalation packet listed in the relevant card section if behavior does not match.",
+    ]
+    for ctx in contexts:
+        parts.extend([
+            "",
+            f"## {_doc_title(ctx)} - {ctx.card_name}",
+            _demote_markdown(generate_support_guide(ctx)),
+        ])
+    return "\n".join(part for part in parts if part is not None).strip()
+
+
+def generate_combined_business_brief(contexts: list[HandoffDocContext], release_name: str = "") -> str:
+    """Generate one release-level Business Brief containing all selected cards."""
+    contexts = [ctx for ctx in contexts if ctx]
+    release = release_name or (contexts[0].release_name if contexts else "") or "MCSL Release"
+    carriers = sorted({carrier for ctx in contexts for carrier in ctx.carrier_names})
+    carrier_scope = ", ".join(carriers) if carriers else "supported shipping workflows"
+    platforms = sorted({platform for ctx in contexts for platform in ctx.platform_names})
+    platform_scope = ", ".join(platforms) if platforms else "the platform(s) named by each card"
+    parts = [
+        f"# What's New: {release}",
+        "",
+        "## Release Overview",
+        f"This release includes {len(contexts)} approved update(s) for PluginHive MCSL across {platform_scope}, covering {carrier_scope}.",
+        "",
+        "## Included Updates",
+        _release_summary_table(contexts),
+    ]
+    for ctx in contexts:
+        parts.extend([
+            "",
+            f"## {_doc_title(ctx)} - {ctx.card_name}",
+            _demote_markdown(generate_business_brief(ctx)),
+        ])
+    parts.extend([
+        "",
+        "## Availability",
+        "These updates are available once the merchant store is on the target MCSL release and any listed prerequisite or toggle is confirmed.",
+    ])
+    return "\n".join(part for part in parts if part is not None).strip()
 
 
 def _register_fonts() -> tuple[str, str]:
@@ -433,7 +716,7 @@ def render_pdf_bytes(title: str, markdown_text: str) -> bytes:
         from reportlab.lib.styles import ParagraphStyle
         from reportlab.lib.units import inch
         from reportlab.platypus import (
-            HRFlowable, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle,
+            HRFlowable, PageBreak, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle,
         )
     except ModuleNotFoundError as exc:
         raise RuntimeError("PDF rendering requires reportlab to be installed") from exc
@@ -522,9 +805,13 @@ def render_pdf_bytes(title: str, markdown_text: str) -> bytes:
     carriers_found = re.findall(
         r'\b(Australia Post|eParcel|MyPost|FedEx|UPS|DHL|USPS|Stamps)\b', title, re.IGNORECASE,
     )
-    subtitle = "MCSL Shopify App"
+    platform_names = detect_platform_scope(title, markdown_text)
+    subtitle = "PluginHive MCSL"
+    if platform_names:
+        subtitle = "PluginHive MCSL  ·  " + " / ".join(platform_names)
     if carriers_found:
-        subtitle = "MCSL App  ·  " + "  /  ".join(dict.fromkeys(c.title() for c in carriers_found))
+        carrier_part = "  /  ".join(dict.fromkeys(c.title() for c in carriers_found))
+        subtitle = f"{subtitle}  ·  {carrier_part}"
 
     # ── Parse markdown ───────────────────────────────────────────────────────
     lines = (markdown_text or "").splitlines()
@@ -622,6 +909,8 @@ def render_pdf_bytes(title: str, markdown_text: str) -> bytes:
                                textColor=C_TEXT)
     chk_sty  = _ps("Chk",     fontName=SANS,            fontSize=10.5, leading=16,
                                textColor=C_TEXT, spaceAfter=3, leftIndent=16)
+    node_sty = _ps("NodeCallout", fontName=f"{SANS}-Bold", fontSize=10, leading=14,
+                               textColor=HexColor("#1e3a8a"), spaceAfter=0)
 
     def _flush_table(raw_rows: list[str]) -> None:
         """Parse buffered markdown table lines and append a styled ReportLab Table."""
@@ -668,6 +957,7 @@ def render_pdf_bytes(title: str, markdown_text: str) -> bytes:
 
     # ── Render content (with table buffering) ────────────────────────────────
     table_buf: list[str] = []
+    seen_card_marker = False
 
     def _maybe_flush():
         if table_buf:
@@ -687,6 +977,12 @@ def render_pdf_bytes(title: str, markdown_text: str) -> bytes:
         if not clean:
             story.append(Spacer(1, 0.05 * inch))
             continue
+        if re.match(r"^CARD\s+\d+/\d+$", clean, flags=re.IGNORECASE):
+            if seen_card_marker:
+                story.append(PageBreak())
+            seen_card_marker = True
+            story.append(Paragraph(_md_to_rl(clean), body_style))
+            continue
         if clean.startswith("## ") or (clean.startswith("# ") and not skip_h1):
             prefix = "## " if clean.startswith("## ") else "# "
             story.extend(_h2_row(clean[len(prefix):].strip()))
@@ -704,6 +1000,19 @@ def render_pdf_bytes(title: str, markdown_text: str) -> bytes:
             else:
                 icon = f'<font color="#1d4ed8" fontName="{SANS}-Bold" fontSize="11">✦</font>'
             story.append(Paragraph(f"{icon}  {text}", chk_sty))
+        elif is_request_log_callout(clean):
+            text = re.sub(r"^[-*]\s*", "", clean).strip()
+            node_tbl = Table([[Paragraph(_md_to_rl(text), node_sty)]], colWidths=[CW])
+            node_tbl.setStyle(TableStyle([
+                ("BACKGROUND",    (0, 0), (-1, -1), HexColor("#dbeafe")),
+                ("BOX",           (0, 0), (-1, -1), 0.7, HexColor("#2563eb")),
+                ("LEFTPADDING",   (0, 0), (-1, -1), 10),
+                ("RIGHTPADDING",  (0, 0), (-1, -1), 10),
+                ("TOPPADDING",    (0, 0), (-1, -1), 7),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 7),
+            ]))
+            story.append(node_tbl)
+            story.append(Spacer(1, 0.08 * inch))
         elif clean.startswith("- ") or clean.startswith("* "):
             text = _md_to_rl(clean[2:].strip())
             story.append(Paragraph(

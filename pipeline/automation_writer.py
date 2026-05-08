@@ -16,6 +16,7 @@ import config
 from langchain_anthropic import ChatAnthropic
 from langchain_core.messages import HumanMessage
 from pipeline.locator_knowledge import build_locator_context
+from pipeline.card_processor import shopify_automation_scope
 
 logger = logging.getLogger(__name__)
 
@@ -520,6 +521,7 @@ def write_automation(
     on_fix_progress=None,
     repo_path: str = "",
     model: str | None = None,
+    qa_platform_confirmed: bool = False,
 ) -> AutomationResult:
     """
     Generate a TypeScript Playwright POM class and spec file from feature_name
@@ -551,6 +553,23 @@ def write_automation(
 
     if not resolved_name:
         _empty.error = "feature_name or card_name is required"
+        return _empty
+
+    _supported, _platforms, _platform_reason = shopify_automation_scope(
+        resolved_name,
+        test_cases_markdown,
+        exploration_data,
+        ai_qa_context,
+        card_name,
+        acceptance_criteria,
+        chrome_trace_context,
+        qa_context,
+        qa_confirmed=qa_platform_confirmed,
+    )
+    if not _supported:
+        _empty.skipped = True
+        _empty.error = _platform_reason
+        _empty.detection_reason = _platform_reason
         return _empty
 
     if not config.ANTHROPIC_API_KEY:

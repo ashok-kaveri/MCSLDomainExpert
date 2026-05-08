@@ -256,12 +256,17 @@ def check_duplicates(
         creds = Credentials.from_service_account_file(config.GOOGLE_CREDENTIALS_PATH, scopes=scopes)
         gc = gspread.authorize(creds)
         sh = gc.open_by_key(config.GOOGLE_SHEETS_ID)
-        # Find matching tab (partial match)
+        # Exact match first to avoid "MCSL 373" matching "MCSL 373a"
         ws = None
         for worksheet in sh.worksheets():
-            if tab_name.lower() in worksheet.title.lower():
+            if worksheet.title.lower() == tab_name.lower():
                 ws = worksheet
                 break
+        if ws is None:
+            for worksheet in sh.worksheets():
+                if tab_name.lower() in worksheet.title.lower():
+                    ws = worksheet
+                    break
         if ws is None:
             return []
         existing_values = ws.get_all_values()
@@ -476,11 +481,18 @@ def append_to_sheet(
 
     ws = None
     ws_titles = [w.title for w in sh.worksheets()]
+    # Exact match first to avoid "MCSL 373" swallowing "MCSL 373a"
     for title in ws_titles:
-        if target_tab.lower() in title.lower() or title.lower() in target_tab.lower():
+        if title.lower() == target_tab.lower():
             ws = sh.worksheet(title)
             target_tab = title
             break
+    if ws is None:
+        for title in ws_titles:
+            if target_tab.lower() in title.lower():
+                ws = sh.worksheet(title)
+                target_tab = title
+                break
     if ws is None:
         for title in ws_titles:
             if "draft" in title.lower():
@@ -491,7 +503,8 @@ def append_to_sheet(
         raise ValueError(f"Sheet tab '{target_tab}' not found in {ws_titles}")
 
     existing = ws.get_all_values()
-    next_si = len(existing)
+    _data_rows = [r for r in existing[1:] if r and str(r[0]).strip().isdigit()]
+    next_si = (int(_data_rows[-1][0]) + 1) if _data_rows else 1
 
     duplicates = check_duplicates(rows, target_tab)
     _use_ai_layout = _worksheet_uses_ai_layout(ws)

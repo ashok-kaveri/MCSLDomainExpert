@@ -27,7 +27,10 @@ class DetectionResult:
 
 DETECTOR_PROMPT = dedent(
     """\
-    You are a Playwright automation expert for the MCSL Shopify app.
+    You are a Playwright automation expert for the Shopify MCSL app.
+    Current automation coverage uses the Shopify/MCSL flow. If the feature is
+    explicitly WooCommerce, BigCommerce, Magento, or PrestaShop, classify it
+    only after noting QA confirmation is required before using the Shopify flow.
 
     Decide whether the feature below is already covered by existing automation or
     whether it should be treated as a new automation area.
