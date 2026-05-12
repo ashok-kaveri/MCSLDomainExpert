@@ -11,6 +11,7 @@ import config
 from langchain_anthropic import ChatAnthropic
 from langchain_core.messages import HumanMessage
 from pipeline.carrier_knowledge import carrier_prompt_block, carrier_research_context
+from pipeline.card_processor import platform_scope_brief
 
 logger = logging.getLogger(__name__)
 
@@ -19,10 +20,10 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 US_WRITER_PROMPT = """\
-You are a senior Product Owner / Business Analyst for the MCSL multi-carrier Shopify app.
+You are a senior Product Owner / Business Analyst for PluginHive MCSL across Shopify, WooCommerce, BigCommerce, Magento, and PrestaShop.
 The app integrates FedEx, UPS, DHL, USPS, and other carrier shipping services
 (label generation, rate calculation, tracking, returns, signature options, etc.)
-into Shopify stores via a Shopify embedded app.
+into supported ecommerce platform stores.
 
 Feature request:
 {feature_request}
@@ -36,9 +37,14 @@ Codebase context (relevant MCSL code):
 Carrier scope guidance:
 {carrier_scope}
 
+Platform scope guidance:
+{platform_scope}
+
 Important interpretation rule:
 - If the request clearly names a carrier, write carrier-specific criteria.
 - If no carrier is named, treat it as a generic MCSL platform feature and avoid inventing carrier-only constraints.
+- If the request names WooCommerce, BigCommerce, Magento, or PrestaShop, use that platform in the story/AC.
+- If no platform is explicit, default QA/support wording to Shopify.
 
 Write a User Story and Acceptance Criteria in this format:
 ### User Story
@@ -53,7 +59,7 @@ As a [persona], I want [feature], so that [benefit].
 """
 
 US_REFINE_PROMPT = """\
-You are refining an existing User Story and Acceptance Criteria for the MCSL multi-carrier Shopify app.
+You are refining an existing User Story and Acceptance Criteria for PluginHive MCSL across Shopify, WooCommerce, BigCommerce, Magento, and PrestaShop.
 
 Current User Story:
 {previous_us}
@@ -136,6 +142,7 @@ def generate_user_story(
         domain_context=domain_context,
         code_context=code_context,
         carrier_scope=carrier_prompt_block(feature_request),
+        platform_scope=platform_scope_brief(feature_request, research_context or ""),
     )
     response = _get_claude(model).invoke([HumanMessage(content=prompt)])
     return response.content.strip()

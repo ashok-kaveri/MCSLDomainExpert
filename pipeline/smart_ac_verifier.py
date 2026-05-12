@@ -37,6 +37,7 @@ from langchain_core.messages import HumanMessage
 
 import config
 from pipeline.carrier_knowledge import detect_carrier_scope
+from pipeline.card_processor import shopify_automation_scope
 from pipeline.locator_knowledge import build_locator_context, fetch_code_locator_hints, save_runtime_locator_memory
 from pipeline.request_expectations import build_request_expectations, compare_expectations
 
@@ -103,6 +104,40 @@ def _detect_carrier(ac_text: str) -> tuple[str, str]:
     return "", ""
 
 
+def _platform_confirmation_report(
+    card_name: str,
+    app_url: str,
+    text: str,
+    *,
+    qa_platform_confirmed: bool = False,
+) -> VerificationReport | None:
+    supported, platforms, reason = shopify_automation_scope(
+        card_name,
+        text,
+        app_url,
+        qa_confirmed=qa_platform_confirmed,
+    )
+    if supported:
+        return None
+    platform_label = ", ".join(platforms)
+    return VerificationReport(
+        card_name=card_name,
+        app_url=app_url,
+        scenarios=[
+            ScenarioResult(
+                scenario=f"Platform scope: {platform_label}",
+                status="qa_needed",
+                verdict="QA confirmation required",
+                finding=reason,
+                qa_question=(
+                    f"{reason} Reply with confirmation if this shared MCSL feature should be tested through "
+                    "the available Shopify/MCSL browser flow."
+                ),
+            )
+        ],
+    )
+
+
 _CARRIER_CONFIG_KEYWORDS = frozenset({
     "add carrier", "configure carrier", "carrier account", "set up carrier",
     "carrier setup", "add a carrier", "setup carrier",
@@ -126,7 +161,8 @@ _PACKAGING_SETUP_KEYWORDS = frozenset({
 
 _AUTOMATION_RULE_KEYWORDS = frozenset({
     "automation rule", "automation rules", "rate rule", "rate rules",
-    "label rule", "automation criteria", "shipping rule",
+    "label rule", "automation criteria", "shipping rule", "rate automation",
+    "label automation",
 })
 
 _REQUEST_LOG_KEYWORDS = frozenset({
@@ -148,6 +184,64 @@ _SHOPIFY_PRODUCT_KEYWORDS = frozenset({
     "create product", "new product", "variant", "product id", "parent id",
     "shopify product", "shopify products",
 })
+
+_NAV_ALIASES: dict[str, str] = {
+    "order": "orders",
+    "allorders": "orders",
+    "allorder": "orders",
+    "ordergrid": "orders",
+    "shipping": "orders",
+    "shipment": "orders",
+    "shipments": "orders",
+    "label": "labels",
+    "labelbatch": "labels",
+    "labelsbatch": "labels",
+    "pickupdetails": "pickup",
+    "manifestdetails": "manifest",
+    "track": "tracking",
+    "trackingdetails": "tracking",
+    "product": "appproducts",
+    "products": "appproducts",
+    "allproducts": "appproducts",
+    "appproducts": "appproducts",
+    "mcslproducts": "appproducts",
+    "carrier": "carriers",
+    "carrieraccounts": "carriers",
+    "addresssettings": "address",
+    "shippingrates": "shippingrates",
+    "shippingrate": "shippingrates",
+    "rates": "shippingrates",
+    "rateautomation": "shippingrates",
+    "labelautomation": "automation",
+    "automationrules": "automation",
+    "requestlog": "requestlog",
+    "logs": "requestlog",
+    "generalsettings": "generalsettings",
+    "settings": "generalsettings",
+    "packaging": "generalsettings",
+    "packagingtypes": "generalsettings",
+    "bulkimport": "bulkimports",
+    "bulkimports": "bulkimports",
+    "shopifyorders": "shopifyorders",
+    "shopifyorder": "shopifyorders",
+    "shopifyproducts": "shopifyproducts",
+    "shopifyproduct": "shopifyproducts",
+}
+
+
+def _normalise_nav_destination(destination: str) -> str:
+    """Map model/QA wording to a supported MCSL navigation key."""
+    compact = re.sub(r"[^a-z0-9]+", "", (destination or "").lower())
+    return _NAV_ALIASES.get(compact, compact)
+
+
+def _normalise_plan_nav_click(destination: str) -> str:
+    """Normalize known destination aliases while preserving step-like nav text."""
+    raw = (destination or "").strip()
+    key = _normalise_nav_destination(raw)
+    if key in _MCSL_NAV_MAP:
+        return key
+    return raw
 
 
 def _get_carrier_config_steps(carrier_name: str, action: str = "add") -> list[str]:
@@ -603,18 +697,18 @@ _MCSL_NAV_MAP: dict[str, dict] = {
     "manifest":       {"type": "tab", "index": 4},          # MANIFEST tab
     "tracking":       {"type": "tab", "index": 5},          # TRACKING tab
     # hamburger → search → click
-    "views":          {"type": "hamburger", "search": "Views"},
-    "appproducts":    {"type": "hamburger", "search": "Products"},
-    "carriers":       {"type": "hamburger", "search": "Carriers"},
-    "address":        {"type": "hamburger", "search": "Address"},
-    "shipping":       {"type": "hamburger", "search": "Shipping"},
-    "automation":     {"type": "hamburger", "search": "Automation"},
-    "requestlog":     {"type": "hamburger", "search": "Request Log"},
-    "shippingrates":  {"type": "hamburger", "search": "Shipping Rates"},
-    "generalsettings":{"type": "hamburger", "search": "General Settings"},
-    "bulkimports":    {"type": "hamburger", "search": "Bulk Imports"},
-    "account":        {"type": "hamburger", "search": "Account"},
-    "stores":         {"type": "hamburger", "search": "Stores"},
+    "views":          {"type": "hamburger", "search": ("Views",)},
+    "appproducts":    {"type": "hamburger", "search": ("All Products", "Products")},
+    "carriers":       {"type": "hamburger", "search": ("Carriers",)},
+    "address":        {"type": "hamburger", "search": ("Address",)},
+    "shipping":       {"type": "hamburger", "search": ("Shipping",)},
+    "automation":     {"type": "hamburger", "search": ("Automation", "Label Automation")},
+    "requestlog":     {"type": "hamburger", "search": ("Request Log",)},
+    "shippingrates":  {"type": "hamburger", "search": ("Shipping Rates", "Rate Automation")},
+    "generalsettings":{"type": "hamburger", "search": ("General Settings", "Packaging")},
+    "bulkimports":    {"type": "hamburger", "search": ("Bulk Imports",)},
+    "account":        {"type": "hamburger", "search": ("Account",)},
+    "stores":         {"type": "hamburger", "search": ("Stores",)},
     # Shopify admin — full page navigation (outside app iframe)
     "shopifyorders":  {"type": "shopify_url", "path": "orders"},
     "shopifyproducts":{"type": "shopify_url", "path": "products"},
@@ -630,7 +724,7 @@ def _navigate_in_app(page: "Page", destination: str, store: str = "") -> bool:
       - For Shopify admin pages (shopifyorders, shopifyproducts): page.goto() is acceptable
         because those are outside the app iframe entirely.
     """
-    key = destination.lower().replace(" ", "").replace("-", "")
+    key = _normalise_nav_destination(destination)
     nav = _MCSL_NAV_MAP.get(key)
     if nav is None:
         logger.warning("navigate: unknown destination %r", destination)
@@ -646,21 +740,32 @@ def _navigate_in_app(page: "Page", destination: str, store: str = "") -> bool:
             return True
 
         if nav["type"] == "hamburger":
-            search_term = nav["search"]
-            # Click the Menu (hamburger) button inside the app iframe
-            page.locator('iframe[name="app-iframe"]').content_frame().get_by_role(
-                "button", name="Menu"
-            ).click()
-            page.wait_for_timeout(500)
-            # Fill the search box that appears in the drawer
-            app_frame.locator(
-                'div[role="presentation"]>div>div>div>input[placeholder="Search..."]'
-            ).fill(search_term)
-            page.wait_for_timeout(300)
-            # Click the matching button (last match to avoid stale duplicates)
-            app_frame.get_by_role("button", name=search_term).last().click()
-            page.wait_for_timeout(1000)
-            return True
+            search_terms = nav["search"]
+            if isinstance(search_terms, str):
+                search_terms = (search_terms,)
+            last_error: Exception | None = None
+            for search_term in search_terms:
+                try:
+                    # Click the Menu (hamburger) button inside the app iframe.
+                    page.locator('iframe[name="app-iframe"]').content_frame().get_by_role(
+                        "button", name="Menu"
+                    ).click()
+                    page.wait_for_timeout(500)
+                    # Fill the search box that appears in the drawer.
+                    app_frame.locator(
+                        'div[role="presentation"]>div>div>div>input[placeholder="Search..."]'
+                    ).fill(search_term)
+                    page.wait_for_timeout(300)
+                    # Click the matching button (last match to avoid stale duplicates).
+                    app_frame.get_by_role("button", name=search_term).last().click()
+                    page.wait_for_timeout(1000)
+                    return True
+                except Exception as e:
+                    last_error = e
+                    logger.debug("navigate(%s) search %r failed: %s", destination, search_term, e)
+                    continue
+            if last_error:
+                raise last_error
 
         if nav["type"] == "shopify_url":
             page.goto(
@@ -708,6 +813,23 @@ If the expected order is not visible:
   → First: look for and click the "Refresh" button if it appears in the grid
   → If no Refresh button: reload the page (up to 5 retries)
   → Then filter by Order ID to find the specific order
+
+### Automation Repo Grounding
+The local Playwright suite uses these stable patterns. Prefer them before
+inventing new selectors:
+- BasePage exposes `this.appFrame = page.frameLocator('iframe[name="app-iframe"]')`
+- Order grid: `appFrame.getByText("Add filter")` → `getByRole("menuitem", name="Order Id")`
+  → `getByRole("textbox").fill(orderID)` → press `Escape`
+- Direct order open: wait/reload until `appFrame.getByRole("link", name=orderID).first()` is visible
+- Row selection: `appFrame.getByRole("row", name="#").locator("label").first()`
+- Actions menu: after selecting a row, click `div[class="buttons-row"] > button:nth-child(4)`,
+  fill the Actions search textbox, then click the menu item
+- All Products: hamburger Menu search should use "All Products" first, then "Products"
+- MCSL product search: `input[placeholder="Search Product Name or SKU"]`
+- Rate Automation and Label Automation have existing POMs; use their locators for
+  Request Log, rule name, carrier/service dropdowns, and criteria inputs
+- Order Summary logs: expand "View all Rate Summary" before clicking the rate-log 3-dot menu
+- Label Summary log: use the Label Summary row 3-dot menu, then menu item "View Log"
 
 ### Label Generation Flow (Manual — same for ALL carriers)
 1. Click "ORDERS" tab → All Orders grid loads inside iframe
@@ -1243,13 +1365,24 @@ def _code_context(scenario: str, card_name: str) -> str:
     try:
         from rag.code_indexer import search_code
 
-        # Automation POM — always include label generation workflow
-        label_docs = search_code(
-            "generate label app order grid navigate MCSL",
-            k=2, source_type="automation",
-        )
-        scenario_pom_docs = search_code(query, k=3, source_type="automation")
-        pom_docs = (label_docs or []) + (scenario_pom_docs or [])
+        # Automation POM — always include app-frame basics and the scenario's
+        # closest existing Playwright workflows so AI QA copies proven paths.
+        pom_docs = []
+        seen_auto_chunks: set[tuple[str, str]] = set()
+        for auto_query in _automation_training_queries(scenario, card_name):
+            for doc in search_code(auto_query, k=2, source_type="automation") or []:
+                key = (
+                    str(doc.metadata.get("file_path", "")),
+                    str(doc.page_content[:120]),
+                )
+                if key in seen_auto_chunks:
+                    continue
+                seen_auto_chunks.add(key)
+                pom_docs.append(doc)
+                if len(pom_docs) >= 8:
+                    break
+            if len(pom_docs) >= 8:
+                break
 
         be_docs = search_code(query, k=2, source_type="storepepsaas_server") or []
         fe_docs: list = []
@@ -1261,7 +1394,7 @@ def _code_context(scenario: str, card_name: str) -> str:
         if pom_docs:
             snippets = "\n---\n".join(
                 f"[{d.metadata.get('file_path', '').split('/')[-1]}]\n{d.page_content[:420]}"
-                for d in pom_docs[:4]
+                for d in pom_docs[:6]
             )
             parts.append(f"=== AUTOMATION WORKFLOW (from POM) ===\n{snippets}")
 
@@ -1467,11 +1600,21 @@ def _plan_scenario(
     # Ensure carrier/setup defaults are always present even if Claude is vague
     if "carrier" not in plan:
         plan["carrier"] = carrier_name
+    if "carrier_code" not in plan:
+        plan["carrier_code"] = carrier_code
     if not isinstance(plan.get("nav_clicks"), list):
         plan["nav_clicks"] = []
+    plan["nav_clicks"] = _dedupe_strings(
+        [
+            _normalise_plan_nav_click(str(nav))
+            for nav in plan.get("nav_clicks", [])
+            if str(nav).strip()
+        ]
+    )
     for _nav in setup.get("nav_clicks", []):
-        if _nav not in plan["nav_clicks"]:
-            plan["nav_clicks"].append(_nav)
+        normalised_nav = _normalise_nav_destination(_nav)
+        if normalised_nav not in plan["nav_clicks"]:
+            plan["nav_clicks"].append(normalised_nav)
     if not isinstance(plan.get("api_to_watch"), list):
         plan["api_to_watch"] = []
     for _api in setup.get("api_to_watch", []):
@@ -2022,6 +2165,7 @@ def _preflight_open_order_summary(page: Any, result: ScenarioResult, order_id: s
 
     # ── Slow path: use Add filter → Order Id filter ──
     # Button label is "Add filter +" in the UI — use has-text to avoid exact mismatch.
+    frame = _get_app_frame(page)
     ok, selector, source = _macro_click(
         page,
         name="Add filter",
@@ -2687,7 +2831,16 @@ def _run_preflight_setup(
     order_id: str | None,
 ) -> str:
     setup_notes: list[str] = []
-    nav_clicks = _dedupe_strings([str(v) for v in (plan_data.get("nav_clicks") or []) if isinstance(v, str)])
+    raw_nav_clicks = _dedupe_strings([
+        str(v)
+        for v in (plan_data.get("nav_clicks") or [])
+        if isinstance(v, str) and str(v).strip()
+    ])
+    nav_clicks = _dedupe_strings([
+        _normalise_nav_destination(str(v))
+        for v in raw_nav_clicks
+        if _normalise_nav_destination(str(v)) in _MCSL_NAV_MAP
+    ])
     precondition_steps = _dedupe_strings([str(v) for v in (plan_data.get("precondition_steps") or []) if isinstance(v, str)])
     look_for = _dedupe_strings([str(v) for v in (plan_data.get("look_for") or []) if isinstance(v, str)])
     api_to_watch = _dedupe_strings([str(v) for v in (plan_data.get("api_to_watch") or []) if isinstance(v, str)])
@@ -2889,6 +3042,14 @@ def _do_action(page: Any, action: dict, app_base: str = "") -> bool:
 
     if atype == "navigate":
         destination = action.get("url", "")
+        if re.match(r"^https?://", destination or ""):
+            try:
+                page.goto(destination, wait_until="domcontentloaded")
+                page.wait_for_timeout(500)
+                return True
+            except Exception as e:
+                logger.debug("navigate full URL failed: %s", e)
+                return False
         store = getattr(config, "STORE", "")
         return _navigate_in_app(page, destination, store)
 
@@ -3206,6 +3367,62 @@ _DECISION_PROMPT = dedent("""\
     7. Click "Mark As Fulfilled" → wait for status = "FULFILLED"
 """)
 
+_AUTOMATION_WORKFLOW_QUERIES: dict[str, tuple[str, ...]] = {
+    "orders": (
+        "OrderGrid navigateToAppAndFilterOrder Order Id Add filter Escape clickOrderId",
+        "order grid actions menu Generate Label Quick Ship Mark As Fulfilled",
+    ),
+    "order_summary": (
+        "OrderSummary Generate Label Prepare Shipment Label Summary View Log Download Documents",
+        "rate summary view log label request summary dialogHalfDivParent",
+    ),
+    "products": (
+        "MCSLProductsPage All Products Search Product Name SKU productLink dimensions weight special services",
+        "products sync AppProducts search product variants",
+    ),
+    "carriers": (
+        "carrier account Add Carrier credentials save carrier row",
+    ),
+    "automation": (
+        "RateAutomationPage LabelAutomationPage Request Log Automation Criteria rule name carrier service",
+        "automation rules rate automation label automation criteria dropdown",
+    ),
+    "shopify_products": (
+        "ShopifyProductsSummaryPage product title variant options save product",
+    ),
+    "shopify_orders": (
+        "ShopifyOrderPage fulfilled tracking number order status",
+    ),
+    "pickup": (
+        "PickupPage pickup schedule pickup details",
+    ),
+}
+
+
+def _automation_training_queries(scenario: str, card_name: str) -> list[str]:
+    tags: list[str] = []
+    combined = f"{card_name} {scenario}".lower()
+    for tag, phrases in {
+        "orders": ("order", "label", "shipment", "fulfill", "quick ship", "actions menu"),
+        "order_summary": ("order summary", "label summary", "rate summary", "view log", "download document", "print documents"),
+        "products": ("product", "variant", "sku", "dimension", "weight", "dry ice", "alcohol", "battery", "signature"),
+        "carriers": ("carrier", "account", "credential"),
+        "automation": ("automation", "rule", "criteria", "rate automation", "label automation"),
+        "shopify_products": ("shopify product", "variant option"),
+        "shopify_orders": ("shopify order", "tracking", "fulfilled in shopify"),
+        "pickup": ("pickup",),
+    }.items():
+        if any(phrase in combined for phrase in phrases):
+            tags.append(tag)
+
+    queries = [
+        "BasePage appFrame iframe app-iframe MCSL",
+        f"{card_name} {scenario}",
+    ]
+    for tag in tags:
+        queries.extend(_AUTOMATION_WORKFLOW_QUERIES.get(tag, ()))
+    return _dedupe_strings(queries)
+
 
 def _decide_next(
     claude: "ChatAnthropic",
@@ -3511,6 +3728,7 @@ def verify_ac(
     progress_cb: "Callable[[int, str, int, str], None] | None" = None,
     qa_answers: "dict[str, str] | None" = None,
     max_scenarios: "int | None" = None,
+    qa_platform_confirmed: bool = False,
 ) -> VerificationReport:
     """Verify AC scenarios for a card against the live MCSL Shopify app.
 
@@ -3526,6 +3744,8 @@ def verify_ac(
         progress_cb:    Optional callback(scenario_idx, scenario_title, step_num, step_desc)
         qa_answers:     {scenario_text: qa_answer} for stuck scenarios
         max_scenarios:  Cap number of scenarios tested (None = test all)
+        qa_platform_confirmed: Allow Shopify/MCSL execution for a card that names
+            WooCommerce, BigCommerce, Magento, or PrestaShop after QA confirms.
 
     Returns:
         VerificationReport with per-scenario results (even if all fail or stop_flag triggers)
@@ -3541,6 +3761,16 @@ def verify_ac(
     if not ac_text:
         report.duration_seconds = time.time() - start
         return report
+
+    platform_block = _platform_confirmation_report(
+        card_name,
+        app_url,
+        ac_text,
+        qa_platform_confirmed=qa_platform_confirmed,
+    )
+    if platform_block:
+        platform_block.duration_seconds = time.time() - start
+        return platform_block
 
     # Initialise Claude (ANTHROPIC_API_KEY validated at runtime — missing key raises here)
     claude = ChatAnthropic(
@@ -3664,6 +3894,7 @@ def verify_test_cases(
     qa_answers: "dict[str, str] | None" = None,
     max_test_cases: "int | None" = None,
     smart_baseline_ctx: str = "",
+    qa_platform_confirmed: bool = False,
 ) -> VerificationReport:
     """Verify reviewed test cases one-by-one, preserving full TC context."""
     ranked = rank_test_cases_for_execution(test_cases_markdown)
@@ -3677,6 +3908,15 @@ def verify_test_cases(
     report = VerificationReport(card_name=card_name, app_url=app_url)
     if not ranked:
         return report
+
+    platform_block = _platform_confirmation_report(
+        card_name,
+        app_url,
+        test_cases_markdown,
+        qa_platform_confirmed=qa_platform_confirmed,
+    )
+    if platform_block:
+        return platform_block
 
     claude = ChatAnthropic(
         model=getattr(config, "CLAUDE_SONNET_MODEL", "claude-sonnet-4-5"),
@@ -3713,6 +3953,7 @@ def reverify_failed(
     app_url: str = "",
     progress_cb: "Callable[[int, str, int, str], None] | None" = None,
     qa_answers: "dict[str, str] | None" = None,
+    qa_platform_confirmed: bool = False,
 ) -> VerificationReport:
     """Re-run only failed/partial/qa-needed test cases from a previous report."""
     ranked = rank_test_cases_for_execution(test_cases_markdown)
@@ -3736,6 +3977,7 @@ def reverify_failed(
         progress_cb=progress_cb,
         qa_answers=qa_answers,
         max_test_cases=None,
+        qa_platform_confirmed=qa_platform_confirmed,
     )
     return report
 

@@ -44,9 +44,34 @@ Planned next major workflow:
 ## Current QA Flow
 
 Shared release state is loaded in `🧾 Validate AC` and reused in downstream tabs.
+QA can narrow the loaded cards before `Load Cards`, then adjust the active-card subset from any pipeline tab without reloading the Trello list.
+
+## Codex / Claude Skill Bundle
+
+Repo-local MCSL skills live under [skills](/Users/madan/Documents/MCSLDomainExpert/skills:1). They mirror the FedEx Domain Expert skill pipeline but use MCSL-native app paths, evidence rules, automation repo paths, labels, and support-doc structure.
+
+Core cycle:
+1. `mcsl-domain-core`
+2. `mcsl-trello-operator`
+3. `mcsl-ac-writer-reviewer`
+4. `mcsl-dashboard-tc-publisher`
+5. `mcsl-ai-qa-testcase-prep`
+6. `mcsl-ai-qa-browser`
+7. `mcsl-automation-writer`
+8. `mcsl-bug`
+9. `mcsl-signoff-message`
+10. `mcsl-handoff-docs`
+
+Maintenance and external workflow helpers:
+- `mcsl-rag-sync`
+- `mcsl-knowledge-maintainer`
+- `mcsl-slack-operator`
+
+When dashboard behavior changes materially, update the matching skill alongside [AGENTS.md](/Users/madan/Documents/MCSLDomainExpert/AGENTS.md:1) and this README.
 
 ### `🧾 Validate AC`
 - select Trello board, list, and release label
+- optionally select a subset of cards from the chosen list
 - click `Load Cards`
 - auto-run per-card MCSL validation and diagnosis
 - auto-run release-level `Release Intelligence`
@@ -59,6 +84,7 @@ Shared release state is loaded in `🧾 Validate AC` and reused in downstream ta
 
 Important current behavior:
 - there is no separate manual `Analyze loaded cards` step
+- active-card subset editing stays available after load across Validate AC, Generate TC, AI QA, and Automation
 - generated AC is revalidated immediately
 - fix and revalidate preserve requirement research context
 
@@ -78,7 +104,10 @@ Important current behavior:
 
 ### `🤖 AI QA Verifier`
 - runs TC-first AI QA against the live app
+- uses the current Shopify/MCSL browser flow by default; if a card names WooCommerce, BigCommerce, Magento, or PrestaShop, ask QA first and run it only when QA confirms the shared MCSL behavior should be tested through the available flow
 - reuses generated and reviewed test cases
+- normalizes navigation wording to MCSL destinations such as `orders`, `appproducts`, `shippingrates`, and `automation`
+- uses existing automation page-object patterns for iframe navigation, Order Id filtering, Actions menu, request logs, label generation, and document checks
 - supports `qa_needed` follow-up and reruns
 - supports failed-finding review and notify-dev flow
 - supports ask-domain-expert
@@ -86,6 +115,8 @@ Important current behavior:
 
 ### `⚙️ Generate Automation Script`
 - `① Write Automation Code`
+- current Playwright generation targets the Shopify MCSL automation repo only
+- cards explicitly scoped to WooCommerce, BigCommerce, Magento, or PrestaShop should not generate automation yet
 - detect existing-vs-new automation targets with `feature_detector` and `find_pom`
 - optional Chrome-agent exploration for locator grounding
 - auto-fix loop for generated code

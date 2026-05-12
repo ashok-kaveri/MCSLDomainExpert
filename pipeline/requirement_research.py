@@ -265,8 +265,14 @@ def _code_research(query: str) -> str:
 
 
 @lru_cache(maxsize=128)
-def _build_requirement_research_context_cached(request_text: str, max_docs: int) -> str:
+def _build_requirement_research_context_cached(
+    request_text: str,
+    max_docs: int,
+    carrier_context_fn_id: int,
+    locator_memory_fn_id: int,
+) -> str:
     """Return a richer research block for story/AC generation."""
+    _ = (carrier_context_fn_id, locator_memory_fn_id)
     query = _clean_text(request_text, 500)
     if not query:
         return ""
@@ -302,7 +308,12 @@ def _build_requirement_research_context_cached(request_text: str, max_docs: int)
 
 
 def build_requirement_research_context(request_text: str, *, max_docs: int = 4) -> str:
-    return _build_requirement_research_context_cached(request_text or "", max_docs)
+    return _build_requirement_research_context_cached(
+        request_text or "",
+        max_docs,
+        id(carrier_research_context),
+        id(load_runtime_locator_memory_context),
+    )
 
 
 def clear_requirement_research_cache() -> None:

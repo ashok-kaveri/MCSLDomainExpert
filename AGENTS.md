@@ -27,6 +27,27 @@ Do not:
 - replace MCSL rules with FedEx rules
 - treat stale docs as source of truth without checking the dashboard code
 
+## Codex / Claude Skills
+
+This repo includes MCSL-local skills under [skills](/Users/madan/Documents/MCSLDomainExpert/skills:1). They are the Codex/Claude-app equivalent of the dashboard workflow and should stay MCSL-native.
+
+Current skill set:
+- `mcsl-domain-core`
+- `mcsl-trello-operator`
+- `mcsl-ac-writer-reviewer`
+- `mcsl-dashboard-tc-publisher`
+- `mcsl-ai-qa-testcase-prep`
+- `mcsl-ai-qa-browser`
+- `mcsl-automation-writer`
+- `mcsl-bug`
+- `mcsl-signoff-message`
+- `mcsl-handoff-docs`
+- `mcsl-rag-sync`
+- `mcsl-knowledge-maintainer`
+- `mcsl-slack-operator`
+
+If changing a dashboard flow, also update the corresponding skill. Do not leave copied FedEx-only wording such as FedEx routes, FedEx labels, SideDock assumptions, or request-ZIP proof paths unless the MCSL code actually uses that behavior.
+
 ## Current Dashboard Split
 
 Keep this split unless the user explicitly asks to change it:
@@ -40,6 +61,7 @@ Shared release state is stored in Streamlit session and reused across tabs:
 - list
 - release label
 - loaded cards
+- full loaded card list for active-card subset editing
 - validations
 - diagnoses
 - release analysis
@@ -53,6 +75,7 @@ Shared release state is stored in Streamlit session and reused across tabs:
 
 Current intended flow:
 - `Load Cards`
+- support selecting a card subset before load
 - auto-run MCSL validation, diagnosis, and release analysis
 - show `Release Intelligence`
 - show `Step 1: Card Requirements`
@@ -64,6 +87,7 @@ Current intended flow:
 
 Important:
 - there should not be a separate `Analyze loaded cards` button
+- after load, the active-card subset editor should remain available across Validate AC, Generate TC, AI QA, and Automation tabs
 - generated AC should be revalidated immediately
 - fix and revalidate should preserve research context
 - MCSL toggle flow should remain MCSL-specific
@@ -87,15 +111,25 @@ Important:
 
 Keep TC-first verification as the default path.
 
+Current execution scope:
+- AI QA browser execution uses the current Shopify/MCSL browser flow by default.
+- AC, TC, and handoff docs can be platform-aware for Shopify, WooCommerce, BigCommerce, Magento, and PrestaShop.
+- If a card is explicitly WooCommerce, BigCommerce, Magento, or PrestaShop, keep the AC/TC/docs platform-specific and ask QA whether to execute it through the available Shopify/MCSL flow. If QA confirms, AI QA can test it because MCSL features are generally shared across platforms; keep the reported platform visible in evidence.
+
 Use automation for:
 - navigation
 - locators
 - repeated flows
+- known Playwright page-object patterns such as app iframe, Order Id filtering, Actions menu, All Products, request logs, and label/document flows
 
 Use codebase, KB, wiki, request registry, and carrier registries for:
 - expectation building
 - request and response reasoning
 - setup guidance
+
+Important:
+- AI QA navigation aliases should normalize QA/model wording like `Shipping`, `All Products`, and `Rate Automation` to supported MCSL destinations
+- carrier-specific AI QA plans should preserve both carrier display name and internal carrier code so order creation can choose the right automation env
 
 Do not reduce AI QA back to AC-only execution.
 
@@ -111,6 +145,10 @@ Current automation matching behavior:
 - detect existing-vs-new feature areas
 - prefer updating existing MCSL automation coverage
 - use `feature_detector` and `find_pom`
+
+Current automation execution scope:
+- Playwright automation generation and runs target the Shopify MCSL automation repo only.
+- For cards explicitly scoped to WooCommerce, BigCommerce, Magento, or PrestaShop, ask QA before generating Shopify/MCSL automation. Generate it only when QA confirms the shared behavior should be covered through the current Shopify automation repo.
 
 ## Toggle Rules
 

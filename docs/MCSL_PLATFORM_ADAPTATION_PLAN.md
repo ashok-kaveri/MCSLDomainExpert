@@ -47,6 +47,10 @@ Already implemented:
 ### 3. AI QA Verifier
 - execute ranked reviewed test cases
 - gather evidence from live app behavior
+- use the current Shopify/MCSL browser flow by default; when a card explicitly names WooCommerce, BigCommerce, Magento, or PrestaShop, ask QA whether to execute it through the available flow and proceed only after confirmation
+- normalize navigation wording to supported MCSL destinations before execution
+- reuse local automation page-object patterns for iframe navigation, Order Id filtering, Actions menu, request logs, label generation, and document checks
+- preserve carrier display name and internal carrier code for carrier-specific order setup
 - support reruns and `qa_needed`
 - review findings and bugs
 
@@ -61,7 +65,9 @@ Already implemented:
 ## MCSL-Specific Operating Rules
 
 ### Navigation
-- MCSL is a Shopify embedded app
+- AC/TC/docs can be platform-aware across Shopify, WooCommerce, BigCommerce, Magento, and PrestaShop
+- if a card does not explicitly name a platform, default QA/support wording to Shopify
+- current AI QA browser and automation execution use the Shopify/MCSL flow; explicit non-Shopify cards require QA confirmation before execution because the underlying feature is usually shared across platforms
 - navigation should use MCSL app paths and automation knowledge, not FedEx routes
 
 ### Verification

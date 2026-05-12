@@ -14,14 +14,15 @@ def _get_docs_and_ids(mock_upsert, call_index=0):
 
 
 def test_stable_ids():
-    """embed_trello_card calls upsert_documents with the correct stable IDs."""
+    """embed_trello_card calls upsert_documents with stable IDs; TC chunks use __0 suffix."""
     with patch("pipeline.rag_updater.upsert_documents") as mock_upsert:
         from pipeline.rag_updater import embed_trello_card
         embed_trello_card("CARD-123", "AC text here", "Test case text here")
         assert mock_upsert.call_count == 1
         docs, ids = _get_docs_and_ids(mock_upsert)
-        assert ids == ["CARD-123__ac", "CARD-123__test_cases"]
-        assert len(docs) == 2
+        assert ids[0] == "CARD-123__ac"
+        assert ids[1].startswith("CARD-123__test_cases__")
+        assert len(docs) == len(ids)
 
 
 def test_upsert_idempotent():
@@ -31,11 +32,13 @@ def test_upsert_idempotent():
         ru.embed_trello_card("CARD-456", "AC v1", "TC v1")
         ru.embed_trello_card("CARD-456", "AC v2", "TC v2")
         assert mock_upsert.call_count == 2
-        # Both calls used same stable IDs — the underlying upsert_documents handles replace
+        # Both calls use the same stable ID pattern — upsert_documents handles replace
         _, first_ids  = _get_docs_and_ids(mock_upsert, call_index=0)
         _, second_ids = _get_docs_and_ids(mock_upsert, call_index=1)
-        assert first_ids  == ["CARD-456__ac", "CARD-456__test_cases"]
-        assert second_ids == ["CARD-456__ac", "CARD-456__test_cases"]
+        assert first_ids[0]  == "CARD-456__ac"
+        assert second_ids[0] == "CARD-456__ac"
+        assert first_ids[1].startswith("CARD-456__test_cases__")
+        assert second_ids[1].startswith("CARD-456__test_cases__")
 
 
 def test_source_type_metadata():

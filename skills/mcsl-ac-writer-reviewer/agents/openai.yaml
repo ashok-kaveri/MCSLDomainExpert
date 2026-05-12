@@ -1,0 +1,3 @@
+display_name: MCSL AC Writer Reviewer
+short_description: Generate and review MCSL User Stories and AC for Trello comments only, including toggle prerequisites.
+default_prompt: Generate a dashboard-style User Story and Acceptance Criteria for this PluginHive MCSL card, detect the platform from the card/ticket (default Shopify if none), review and rewrite it for gaps, detect toggle prerequisites, and prepare the Trello comment plus Ashok Slack notification if needed. Do not update the card description.

@@ -44,7 +44,6 @@ from pipeline.sheets_writer import (
     append_to_sheet,
     check_duplicates,
     create_new_tab,
-    detect_tab,
     list_sheet_tabs,
     parse_test_cases_to_rows,
 )
@@ -99,10 +98,10 @@ def _update_pipeline_run(card: Any, **fields: Any) -> None:
     card_id = getattr(card, "id", "")
     existing = runs.get(card_id, {})
     runs[card_id] = {
+        **existing,
         "card_name": getattr(card, "name", existing.get("card_name", "")),
         "card_url": getattr(card, "url", existing.get("card_url", "")),
         "release": st.session_state.get("rqa_release", existing.get("release", "")),
-        **existing,
         **fields,
     }
     st.session_state["pipeline_runs"] = runs
@@ -251,6 +250,7 @@ _CARD_STATE_PREFIXES: tuple[str, ...] = (
     "tc_text_",
     "tc_review_",
     "tc_saved_",
+    "tc_trello_saved_",
     "feedback_",
     "sheet_tab_",
     "sheet_dups_",
@@ -323,6 +323,15 @@ def _hydrate_release_approval_state(cards: list[Any]) -> dict[str, bool]:
         run = runs.get(card_id, {}) if card_id else {}
         approved[card_id] = bool(run.get("approved_at"))
     return approved
+
+
+def _restore_card_history_state(card_id: str, run_entry: dict[str, Any] | None) -> None:
+    """Rehydrate durable per-card UI state from persisted history after reload."""
+    entry = run_entry or {}
+    if entry.get("tc_published_at"):
+        st.session_state[f"tc_saved_{card_id}"] = True
+    if entry.get("ai_qa_evidence"):
+        st.session_state[f"sav_context_{card_id}"] = entry.get("ai_qa_evidence", "")
 
 
 def _get_card_run(card_id: str) -> dict[str, Any]:
@@ -407,8 +416,9 @@ def _filter_duplicate_test_cases(test_cases_markdown: str, duplicates: list[Any]
             elif current_block and skip_block:
                 skipped += 1
             current_block = [line]
-            title = line.split(":", 1)[-1].strip().lower()
-            skip_block = any(title in scenario or scenario in title for scenario in dup_scenarios)
+            # Match on the full "TC-N: <title>" string so short words don't cross-match
+            full_header = line.strip().lstrip("#").strip().lower()
+            skip_block = full_header in dup_scenarios
         else:
             current_block.append(line)
 
@@ -2077,7 +2087,7 @@ def main() -> None:
             elif mcsl_repo_probe:
                 st.caption(f"Current: `{mcsl_current or 'unknown'}` @ `{mcsl_commit}`" if mcsl_current else "⚠️ Branch info unavailable")
             st.caption(
-                f"Indexed chunks: backend `{_mcsl_server_cnt}` · frontend `{_mcsl_client_cnt}`"
+                f"Indexed chunks: StorePep server `{_mcsl_server_cnt}` · StorePep client `{_mcsl_client_cnt}`"
             )
             col_sync, col_idx = st.columns(2)
             with col_sync:
@@ -2103,12 +2113,12 @@ def main() -> None:
                                 )
                             )
                     if not sync_results:
-                        st.warning("Set backend and/or frontend path first.")
+                        st.warning("Set StorePep server and/or client path first.")
                     elif any(r.get("error") for r in sync_results):
                         errors = [r.get("error", "") for r in sync_results if r.get("error")]
                         st.error("Sync failed: " + " | ".join(errors))
                     else:
-                        st.success("Synced backend/frontend app code.")
+                        st.success("Synced StorePep server/client app code.")
                     st.rerun()
             with col_idx:
                 if st.button("Full Re-index", key="mcsl_reindex_btn"):
@@ -2135,12 +2145,12 @@ def main() -> None:
                         if reindex_results:
                             _clear_generation_context_caches()
                     if not reindex_results:
-                        st.warning("Set backend and/or frontend path first.")
+                        st.warning("Set StorePep server and/or client path first.")
                     elif any(r.get("error") for r in reindex_results):
                         errors = [r.get("error", "") for r in reindex_results if r.get("error")]
                         st.error("Re-index failed: " + " | ".join(errors))
                     else:
-                        st.success("Re-indexed backend + frontend app code.")
+                        st.success("Re-indexed StorePep server/client app code.")
                     st.rerun()
 
         # ── MCSL Wiki (documents) ─────────────────────────────────────────
@@ -3034,6 +3044,7 @@ def main() -> None:
                                 *(getattr(c, "id", "") for c in cards),
                             })
                             _clear_card_session_state([cid for cid in _reset_card_ids if cid])
+                            st.session_state["rqa_all_cards"] = _all_fetched
                             st.session_state["rqa_cards"] = cards
                             st.session_state["rqa_list_name"] = selected_list_name
                             st.session_state["rqa_board_id"] = rqa_board_id
@@ -3041,6 +3052,11 @@ def main() -> None:
                             st.session_state["rqa_release"] = release_label or _extract_release_label(selected_list_name)
                             st.session_state["rqa_test_cases"] = {}
                             st.session_state["rqa_approved"] = _hydrate_release_approval_state(cards)
+                            _runs = st.session_state.get("pipeline_runs", {}) or {}
+                            for _card in cards:
+                                _card_id = getattr(_card, "id", "")
+                                if _card_id:
+                                    _restore_card_history_state(_card_id, _runs.get(_card_id, {}))
                             st.session_state["signoff_sent"] = False
                             st.session_state["signoff_message"] = ""
                             st.session_state["signoff_bugs"] = ""
@@ -3114,13 +3130,69 @@ def main() -> None:
             if not cards:
                 st.info("Select a Trello list in **🧾 Validate AC** and click **Load Cards** to begin the QA flow.")
                 continue
+            # ── Active card subset editor ──────────────────────────────────
+            # Keep the full loaded list available so QA can narrow or restore
+            # the active release cards from any pipeline tab.
+            all_loaded_cards = _dedupe_cards(st.session_state.get("rqa_all_cards", []) or cards)
+            st.session_state["rqa_all_cards"] = all_loaded_cards
+            total_loaded_count = len(all_loaded_cards)
+            active_card_count = len(cards)
+            subset_label = (
+                f"🎯 {active_card_count} of {total_loaded_count} cards active"
+                if active_card_count < total_loaded_count
+                else f"🎯 All {total_loaded_count} cards active"
+            )
+            with st.expander(subset_label, expanded=False):
+                def _active_card_label(card: object) -> str:
+                    labels = getattr(card, "labels", None) or []
+                    name = getattr(card, "name", "")
+                    return f"{name}  [{', '.join(labels)}]" if labels else name
+
+                option_labels = [_active_card_label(card) for card in all_loaded_cards]
+                label_to_id = {
+                    _active_card_label(card): getattr(card, "id", "")
+                    for card in all_loaded_cards
+                }
+                active_card_ids = {getattr(card, "id", "") for card in cards}
+                default_labels = [
+                    _active_card_label(card)
+                    for card in all_loaded_cards
+                    if getattr(card, "id", "") in active_card_ids
+                ]
+                col_all, col_clear, col_count = st.columns([1, 1, 4])
+                with col_all:
+                    if st.button("All", key=f"rqa_active_all_{release_stage}", use_container_width=True):
+                        st.session_state["rqa_cards"] = list(all_loaded_cards)
+                        st.rerun()
+                with col_clear:
+                    if st.button("Clear", key=f"rqa_active_clear_{release_stage}", use_container_width=True):
+                        st.session_state[f"rqa_active_cards_{release_stage}"] = []
+                with col_count:
+                    st.caption(f"{active_card_count} of {total_loaded_count} cards active in this tab")
+
+                chosen_labels = st.multiselect(
+                    "Active cards",
+                    options=option_labels,
+                    default=default_labels,
+                    key=f"rqa_active_cards_{release_stage}",
+                    label_visibility="collapsed",
+                    placeholder="Select cards to keep active in this session…",
+                )
+                if st.button("Apply subset", key=f"rqa_active_apply_{release_stage}", type="primary"):
+                    chosen_ids = {label_to_id[label] for label in chosen_labels if label in label_to_id}
+                    st.session_state["rqa_cards"] = (
+                        [card for card in all_loaded_cards if getattr(card, "id", "") in chosen_ids]
+                        if chosen_ids else list(all_loaded_cards)
+                    )
+                    st.rerun()
+
             # ── Health summary ───────────────────────────────────────────────
             approved_store: dict = st.session_state.get("rqa_approved", {})
             val_statuses = [st.session_state.get(f"validation_{c.id}") for c in cards]
             n_pass   = sum(1 for v in val_statuses if v and v.overall_status == "PASS")
             n_review = sum(1 for v in val_statuses if v and v.overall_status == "NEEDS_REVIEW")
             n_fail   = sum(1 for v in val_statuses if v and v.overall_status == "FAIL")
-            approved_count = sum(1 for v in approved_store.values() if v)
+            approved_count = sum(1 for c in cards if approved_store.get(c.id))
 
             hcols = st.columns(5)
             hcols[0].metric("Total Cards", len(cards))
@@ -4088,53 +4160,12 @@ def main() -> None:
                                 f"⚠️ {_tc_edge} edge → Trello comment only"
                             )
 
-                            _publish_tab_key = f"tc_publish_tab_{card.id}"
                             _publish_dup_key = f"tc_publish_dups_{card.id}"
                             _publish_dup_tab_key = f"tc_publish_dups_tab_{card.id}"
                             _publish_dup_override_key = f"tc_publish_dup_override_{card.id}"
-                            _publish_new_tab_key = f"tc_publish_new_tab_{card.id}"
-                            _publish_created_tab_key = f"tc_publish_created_tab_{card.id}"
 
-                            _suggested_tab = detect_tab(card.name, _edited_tc)
-                            _live_publish_tabs = _sheet_tab_options()
-                            if _publish_tab_key not in st.session_state:
-                                st.session_state[_publish_tab_key] = _suggested_tab if _suggested_tab in _live_publish_tabs else "Draft Plan"
-
-                            _publish_cols = st.columns([3, 2])
-                            with _publish_cols[0]:
-                                _publish_options = list(_live_publish_tabs)
-                                _newly_created_tab = st.session_state.get(_publish_created_tab_key, "")
-                                if _newly_created_tab and _newly_created_tab not in _publish_options:
-                                    _publish_options.insert(0, _newly_created_tab)
-                                _selected_publish_tab = st.selectbox(
-                                    "📊 Google Sheets tab for positive TCs",
-                                    options=_publish_options,
-                                    key=_publish_tab_key,
-                                )
-                            with _publish_cols[1]:
-                                _new_publish_tab_name = st.text_input(
-                                    "➕ Or create new tab",
-                                    key=_publish_new_tab_key,
-                                    placeholder="New tab name…",
-                                    label_visibility="collapsed",
-                                )
-                                if st.button("➕ Create Tab", key=f"tc_publish_create_tab_{card.id}", use_container_width=True):
-                                    if _new_publish_tab_name.strip():
-                                        with st.spinner(f"Creating tab '{_new_publish_tab_name.strip()}'…"):
-                                            _create_tab_result = create_new_tab(_new_publish_tab_name.strip())
-                                        if _create_tab_result.get("ok"):
-                                            _created_tab = _create_tab_result["tab"]
-                                            _live_tabs = st.session_state.get("live_sheet_tabs", list(SHEET_TABS))
-                                            if _created_tab not in _live_tabs:
-                                                _live_tabs.append(_created_tab)
-                                                st.session_state["live_sheet_tabs"] = _live_tabs
-                                            st.session_state[_publish_created_tab_key] = _created_tab
-                                            st.session_state[_publish_tab_key] = _created_tab
-                                            st.success(f"✅ Tab '{_created_tab}' ready")
-                                            st.rerun()
-                                        st.error(f"❌ Failed: {_create_tab_result.get('error', 'unknown error')}")
-                                    else:
-                                        st.warning("Enter a tab name first.")
+                            _rqa_release = st.session_state.get("rqa_release", "")
+                            _selected_publish_tab = _rqa_release.replace("PROD ", "").replace("SL: ", "").strip() or "Draft Plan"
 
                             _publish_rows = parse_test_cases_to_rows(
                                 card.name,
@@ -4146,7 +4177,7 @@ def main() -> None:
                             with _pub_metric1:
                                 st.metric("Google Sheets rows to write", len(_publish_rows))
                             with _pub_metric2:
-                                st.metric("Suggested Google Sheets tab", _suggested_tab)
+                                st.metric("Sheet tab", _selected_publish_tab)
 
                             _pub_dup_cols = st.columns([1, 3])
                             with _pub_dup_cols[0]:
@@ -4230,6 +4261,7 @@ def main() -> None:
 
                                     _publish_sheet_result = None
                                     try:
+                                        create_new_tab(_selected_publish_tab)
                                         if _publish_dups and st.session_state.get(_publish_dup_override_key, False):
                                             _tc_to_write, _skipped_duplicates = _filter_duplicate_test_cases(
                                                 _edited_tc,
@@ -4287,7 +4319,8 @@ def main() -> None:
                         _step_header("1", "AI QA Agent")
                         st.caption(
                             "Claude opens Chrome, uses automation navigation + MCSL domain knowledge, "
-                            "walks the live app, verifies each generated test case, and asks QA only when needed."
+                            "walks the live Shopify app, verifies each generated test case, and asks QA only when needed. "
+                            "Non-Shopify platform cards remain manual for AI QA until those browser flows are added."
                         )
 
                         _sav_running_key    = f"sav_running_{card.id}"
@@ -4358,6 +4391,28 @@ def main() -> None:
                                     st.markdown(f"- `{_tc.tc_id}` [{_tc.priority}/{_tc.tc_type}] {_tc.title}")
                         else:
                             st.warning("TC-based verification requires generated test cases. Generate them in Step 3 first, then return here.")
+
+                        _platform_confirm_key = f"sav_platform_confirm_{card.id}"
+                        try:
+                            from pipeline.card_processor import shopify_automation_scope as _aiqa_platform_scope
+
+                            _aiqa_supported, _aiqa_platforms, _aiqa_platform_reason = _aiqa_platform_scope(
+                                card.name,
+                                card.desc or "",
+                                _tc_for_agent,
+                                "\n".join(getattr(card, "comments", []) or []),
+                                qa_confirmed=bool(st.session_state.get(_platform_confirm_key, False)),
+                            )
+                        except Exception:
+                            _aiqa_supported, _aiqa_platforms, _aiqa_platform_reason = True, ["Shopify"], ""
+
+                        if not _aiqa_supported:
+                            st.info(_aiqa_platform_reason)
+                            st.checkbox(
+                                "QA confirmed: test this shared MCSL behavior using the available Shopify/MCSL AI QA flow",
+                                key=_platform_confirm_key,
+                                help="Use this only after QA confirms the non-Shopify reported card should still be executed through the current Shopify browser flow.",
+                            )
 
                         _btn_col, _smart_col, _stop_col = st.columns([3, 3, 2])
                         with _btn_col:
@@ -4572,6 +4627,7 @@ def main() -> None:
                                 _card_name=card.name,
                                 _tc_markdown=_tc_for_agent,
                                 _qa_answers=st.session_state.get(_sav_qa_answers_key, {}),
+                                _qa_platform_confirmed=bool(st.session_state.get(_platform_confirm_key, False)),
                                 _max=(int(complexity_val) if _limit_enabled else None),
                                 _event=_stop_event,
                                 _rk=_sav_result_key,
@@ -4599,6 +4655,7 @@ def main() -> None:
                                             stop_flag=lambda: _event.is_set() or st.session_state.get(_sk, False),
                                             progress_cb=_prog_cb,
                                             qa_answers=_qa_answers,
+                                            qa_platform_confirmed=_qa_platform_confirmed,
                                         )
                                     else:
                                         report = verify_test_cases(
@@ -4610,6 +4667,7 @@ def main() -> None:
                                             qa_answers=_qa_answers,
                                             max_test_cases=_max,
                                             smart_baseline_ctx=_smart_ctx,
+                                            qa_platform_confirmed=_qa_platform_confirmed,
                                         )
                                     st.session_state[_repk] = report
                                     st.session_state[_rk] = {"done": True, "report": report, "error": None}
@@ -4896,49 +4954,8 @@ def main() -> None:
                                     "⚠️ Test cases have not been published yet. Save them in Generate TC first, "
                                     "or use the fallback approve-and-save flow below."
                                 )
-                            _suggested_tab = detect_tab(card.name, _tc_markdown)
-                            _tab_created_key = f"sheet_tab_created_{card.id}"
-                            _new_tab_key = f"sheet_new_tab_{card.id}"
-                            _live_approval_tabs = _sheet_tab_options()
-                            if _sheet_tab_key not in st.session_state:
-                                st.session_state[_sheet_tab_key] = (
-                                    _suggested_tab if _suggested_tab in _live_approval_tabs else "Draft Plan"
-                                )
-                            _sheet_tab_cols = st.columns([3, 2])
-                            with _sheet_tab_cols[0]:
-                                _tab_options = list(_live_approval_tabs)
-                                _newly_created_tab = st.session_state.get(_tab_created_key, "")
-                                if _newly_created_tab and _newly_created_tab not in _tab_options:
-                                    _tab_options.insert(0, _newly_created_tab)
-                                _selected_tab = st.selectbox(
-                                    "📊 Add to sheet tab",
-                                    options=_tab_options,
-                                    key=_sheet_tab_key,
-                                )
-                            with _sheet_tab_cols[1]:
-                                _new_tab_name = st.text_input(
-                                    "➕ Or create new tab",
-                                    key=_new_tab_key,
-                                    placeholder="New tab name…",
-                                    label_visibility="collapsed",
-                                )
-                                if st.button("➕ Create Tab", key=f"create_tab_{card.id}", use_container_width=True):
-                                    if _new_tab_name.strip():
-                                        with st.spinner(f"Creating tab '{_new_tab_name.strip()}'…"):
-                                            _create_tab_result = create_new_tab(_new_tab_name.strip())
-                                        if _create_tab_result.get("ok"):
-                                            _created_tab = _create_tab_result["tab"]
-                                            _live_tabs = st.session_state.get("live_sheet_tabs", list(SHEET_TABS))
-                                            if _created_tab not in _live_tabs:
-                                                _live_tabs.append(_created_tab)
-                                                st.session_state["live_sheet_tabs"] = _live_tabs
-                                            st.session_state[_tab_created_key] = _created_tab
-                                            st.session_state[_sheet_tab_key] = _created_tab
-                                            st.success(f"✅ Tab '{_created_tab}' ready")
-                                            st.rerun()
-                                        st.error(f"❌ Failed: {_create_tab_result.get('error', 'unknown error')}")
-                                    else:
-                                        st.warning("Enter a tab name first.")
+                            _rqa_release = st.session_state.get("rqa_release", "")
+                            _selected_tab = _rqa_release.replace("PROD ", "").replace("SL: ", "").strip() or "Draft Plan"
 
                             _parsed_rows = parse_test_cases_to_rows(
                                 card.name,
@@ -4953,7 +4970,7 @@ def main() -> None:
                             with _metric_col1:
                                 st.metric("Google Sheets rows to write", len(_parsed_rows))
                             with _metric_col2:
-                                st.metric("Suggested Google Sheets tab", _suggested_tab)
+                                st.metric("Sheet tab", _selected_tab)
 
                             _dup_col1, _dup_col2 = st.columns([1, 3])
                             with _dup_col1:
@@ -5021,6 +5038,7 @@ def main() -> None:
                                             _approve_errors.append(f"Trello: {_trello_err}")
 
                                         try:
+                                            create_new_tab(_selected_tab)
                                             if _dup_matches and st.session_state.get(_dup_override_key, False):
                                                 _tc_to_write, _skipped_duplicates = _filter_duplicate_test_cases(
                                                     _tc_markdown,
@@ -5098,7 +5116,8 @@ def main() -> None:
                             )
                             st.caption(
                                 "This step creates the release spec for this approved card. "
-                                "Use the reviewed test cases below as the source, then the Run section will unlock."
+                                "Use the reviewed test cases below as the source, then the Run section will unlock. "
+                                "Automation generation currently targets the Shopify MCSL Playwright repo only."
                             )
 
                             _auto_tc_src = (
@@ -5108,9 +5127,29 @@ def main() -> None:
                                 or (_existing_tc_markdown or "").strip()
                             )
                             _is_approved_for_auto = approved_store.get(card.id, False)
+                            _auto_platform_confirm_key = f"auto_platform_confirm_{card.id}"
+                            try:
+                                from pipeline.card_processor import shopify_automation_scope as _shopify_auto_scope
+
+                                _auto_supported, _auto_platforms, _auto_platform_reason = _shopify_auto_scope(
+                                    card.name,
+                                    card.desc or "",
+                                    _auto_tc_src,
+                                    "\n".join(getattr(card, "comments", []) or []),
+                                    qa_confirmed=bool(st.session_state.get(_auto_platform_confirm_key, False)),
+                                )
+                            except Exception:
+                                _auto_supported, _auto_platforms, _auto_platform_reason = True, ["Shopify"], ""
 
                             if not _is_approved_for_auto:
                                 st.info("Approve the card in AI QA Verifier before writing automation.")
+                            elif not _auto_supported:
+                                st.info(_auto_platform_reason)
+                                st.checkbox(
+                                    "QA confirmed: generate Shopify/MCSL automation for this shared behavior",
+                                    key=_auto_platform_confirm_key,
+                                    help="Use this only after QA confirms the reported non-Shopify card should be covered through the current Shopify automation repo.",
+                                )
                             else:
                                 _det_key = f"auto_detection_{card.id}"
                                 _auto_feat_key = f"auto_feat_{card.id}"
@@ -5329,6 +5368,7 @@ def main() -> None:
                                                 fix_iterations=3,
                                                 on_fix_progress=_on_fix_progress,
                                                 repo_path=_repo_path,
+                                                qa_platform_confirmed=bool(st.session_state.get(_auto_platform_confirm_key, False)),
                                             )
                                             _written_files: list[str] = []
                                             if _repo_path and not _card_auto_result.error and not _dry_run:
@@ -5386,7 +5426,9 @@ def main() -> None:
 
                                 _card_auto_result = st.session_state.get(_auto_res_key)
                                 if _card_auto_result:
-                                    if _card_auto_result.error:
+                                    if getattr(_card_auto_result, "skipped", False) and _card_auto_result.error:
+                                        st.info(f"ℹ️ {_card_auto_result.error}")
+                                    elif _card_auto_result.error:
                                         st.error(f"❌ {_card_auto_result.error}")
                                     else:
                                         _written_files = st.session_state.get(_auto_written_key, [])
@@ -6070,7 +6112,7 @@ def main() -> None:
             _carrier_code = st.text_input(
                 "Carrier code",
                 key="new_carrier_code",
-                placeholder="e.g. fedex-new-api",
+                placeholder="e.g. carrier-new-api",
                 help="Used for the generated carrier env filename.",
             ).strip()
             _store_name = st.text_input(
@@ -6984,6 +7026,8 @@ def main() -> None:
         else:
             from pipeline.handoff_docs import (
                 build_handoff_context,
+                generate_combined_business_brief,
+                generate_combined_support_guide,
                 generate_business_brief,
                 generate_support_guide,
                 render_pdf_bytes,
@@ -7025,6 +7069,28 @@ def main() -> None:
                     members=_members,
                 )
 
+            _all_contexts = [_handoff_context_for(card) for card in handoff_cards]
+            _pkg_release = handoff_release or st.session_state.get("hd_list_name", "") or "MCSL Release"
+            st.markdown("### Release Package")
+            st.caption("Generate one combined PDF for the whole release list.")
+            _pkg_col1, _pkg_col2, _pkg_col3 = st.columns(3)
+            with _pkg_col1:
+                if st.button("📘 Combined Support Guide", key="handoff_combined_support_btn", type="primary", use_container_width=True):
+                    with st.spinner("Generating combined release support guide…"):
+                        st.session_state["handoff_support_release"] = generate_combined_support_guide(_all_contexts, _pkg_release)
+                    st.rerun()
+            with _pkg_col2:
+                if st.button("💼 Combined Business Brief", key="handoff_combined_business_btn", type="primary", use_container_width=True):
+                    with st.spinner("Generating combined release business brief…"):
+                        st.session_state["handoff_business_release"] = generate_combined_business_brief(_all_contexts, _pkg_release)
+                    st.rerun()
+            with _pkg_col3:
+                if st.button("🤖 Combined Both", key="handoff_combined_both_btn", use_container_width=True):
+                    with st.spinner("Generating combined release documents…"):
+                        st.session_state["handoff_support_release"] = generate_combined_support_guide(_all_contexts, _pkg_release)
+                        st.session_state["handoff_business_release"] = generate_combined_business_brief(_all_contexts, _pkg_release)
+                    st.rerun()
+
             _doc_options = {card.name: card for card in handoff_cards}
             _selected_name = st.selectbox(
                 "Select approved card",
@@ -7058,8 +7124,8 @@ def main() -> None:
                         st.session_state[f"handoff_business_{_target_card.id}"] = generate_business_brief(_ctx)
                     st.rerun()
 
-            def _render_doc_editor(doc_type: str, label: str) -> None:
-                _state_key = f"handoff_{doc_type}_{_target_card.id}"
+            def _render_doc_editor(doc_type: str, label: str, state_suffix: str, target_card: Any | None = None) -> None:
+                _state_key = f"handoff_{doc_type}_{state_suffix}"
                 _text = st.session_state.get(_state_key, "")
                 if not _text:
                     return
@@ -7070,14 +7136,17 @@ def main() -> None:
                     f"{label} content",
                     value=_text,
                     height=520 if doc_type == "support" else 420,
-                    key=f"handoff_editor_{doc_type}_{_target_card.id}",
+                    key=f"handoff_editor_{doc_type}_{state_suffix}",
                     label_visibility="collapsed",
                 )
                 st.session_state[_state_key] = _edited
 
                 _md_bytes = _edited.encode("utf-8")
-                _pdf_title = f"{label} - {_target_card.name}"
-                _base = _safe_fname(f"{_target_card.name}_{doc_type}")
+                _target_name = getattr(target_card, "name", _pkg_release)
+                _target_url = getattr(target_card, "url", "")
+                _target_id = getattr(target_card, "id", "")
+                _pdf_title = f"{label} - {_target_name}"
+                _base = _safe_fname(f"{_target_name}_{doc_type}")
                 _md_name = f"{_base}.md"
                 _pdf_name = f"{_base}.pdf"
                 _pdf_bytes = b""
@@ -7094,7 +7163,7 @@ def main() -> None:
                         data=_md_bytes,
                         file_name=_md_name,
                         mime="text/markdown",
-                        key=f"download_md_{doc_type}_{_target_card.id}",
+                        key=f"download_md_{doc_type}_{state_suffix}",
                         use_container_width=True,
                     )
                 with _dl2:
@@ -7103,7 +7172,7 @@ def main() -> None:
                         data=_pdf_bytes,
                         file_name=_pdf_name,
                         mime="application/pdf",
-                        key=f"download_pdf_{doc_type}_{_target_card.id}",
+                        key=f"download_pdf_{doc_type}_{state_suffix}",
                         disabled=bool(_pdf_error),
                         use_container_width=True,
                     )
@@ -7112,18 +7181,19 @@ def main() -> None:
 
                 _act1, _act2, _act3 = st.columns(3)
                 with _act1:
-                    if st.button("📎 Attach PDF to Trello", key=f"attach_trello_{doc_type}_{_target_card.id}", use_container_width=True, disabled=bool(_pdf_error)):
+                    _attach_disabled = bool(_pdf_error) or not bool(_target_id)
+                    if st.button("📎 Attach PDF to Trello", key=f"attach_trello_{doc_type}_{state_suffix}", use_container_width=True, disabled=_attach_disabled):
                         try:
                             _trello = TrelloClient(board_id=st.session_state.get("hd_board_id") or st.session_state.get("rqa_board_id") or None)
                             _att = _trello.attach_file(
-                                _target_card.id,
+                                _target_id,
                                 filename=_pdf_name,
                                 file_bytes=_pdf_bytes,
                                 mime_type="application/pdf",
                                 attachment_name=_pdf_name,
                             )
                             _trello.add_comment(
-                                _target_card.id,
+                                _target_id,
                                 f"📘 {label} attached by MCSL QA Pipeline\n\n"
                                 f"Attachment: {(_att or {}).get('url', _pdf_name)}"
                             )
@@ -7145,16 +7215,16 @@ def main() -> None:
                             _sel = st.selectbox(
                                 "Slack channel",
                                 options=list(_ch_map.keys()),
-                                key=f"handoff_ch_sel_{doc_type}_{_target_card.id}",
+                                key=f"handoff_ch_sel_{doc_type}_{state_suffix}",
                                 label_visibility="collapsed",
                             )
-                            if st.button("📢 Send PDF to Channel", key=f"send_ch_{doc_type}_{_target_card.id}", use_container_width=True, disabled=bool(_pdf_error)):
+                            if st.button("📢 Send PDF to Channel", key=f"send_ch_{doc_type}_{state_suffix}", use_container_width=True, disabled=bool(_pdf_error)):
                                 _res = upload_file_to_slack_channel(
                                     channel_id=_ch_map[_sel],
                                     filename=_pdf_name,
                                     file_bytes=_pdf_bytes,
                                     title=_pdf_title,
-                                    initial_comment=f"📘 {label} - {_target_card.name}\n{_target_card.url}",
+                                    initial_comment=f"📘 {label} - {_target_name}\n{_target_url}",
                                 )
                                 if _res.get("ok"):
                                     st.success("✅ PDF sent to Slack channel")
@@ -7167,16 +7237,16 @@ def main() -> None:
                     else:
                         st.caption("Slack bot not configured")
                 with _act3:
-                    _pool_key = f"handoff_user_pool_{doc_type}_{_target_card.id}"
+                    _pool_key = f"handoff_user_pool_{doc_type}_{state_suffix}"
                     if _pool_key not in st.session_state:
                         st.session_state[_pool_key] = {}
                     _query = st.text_input(
                         "Search person",
-                        key=f"handoff_user_search_{doc_type}_{_target_card.id}",
+                        key=f"handoff_user_search_{doc_type}_{state_suffix}",
                         label_visibility="collapsed",
                         placeholder="Search Slack user",
                     )
-                    if st.button("🔎 Find", key=f"handoff_find_user_{doc_type}_{_target_card.id}", use_container_width=True):
+                    if st.button("🔎 Find", key=f"handoff_find_user_{doc_type}_{state_suffix}", use_container_width=True):
                         if _query.strip():
                             _found, _err = search_slack_users(_query.strip())
                             if _err:
@@ -7194,25 +7264,27 @@ def main() -> None:
                         _picked = st.selectbox(
                             "Recipient",
                             options=list(_pool.keys()),
-                            key=f"handoff_user_pick_{doc_type}_{_target_card.id}",
+                            key=f"handoff_user_pick_{doc_type}_{state_suffix}",
                             label_visibility="collapsed",
                         )
-                        if st.button("📨 Send PDF to Person", key=f"handoff_send_user_{doc_type}_{_target_card.id}", use_container_width=True, disabled=bool(_pdf_error)):
+                        if st.button("📨 Send PDF to Person", key=f"handoff_send_user_{doc_type}_{state_suffix}", use_container_width=True, disabled=bool(_pdf_error)):
                             _uid = _pool[_picked]
                             _res = upload_file_to_slack_user(
                                 user_id=_uid,
                                 filename=_pdf_name,
                                 file_bytes=_pdf_bytes,
                                 title=_pdf_title,
-                                initial_comment=f"📘 {label} - {_target_card.name}\n{_target_card.url}",
+                                initial_comment=f"📘 {label} - {_target_name}\n{_target_url}",
                             )
                             if _res.get("ok"):
                                 st.success("✅ PDF sent via Slack DM")
                             else:
                                 st.error(f"❌ Slack DM upload failed: {_res.get('error')}")
 
-            _render_doc_editor("support", "Support Guide")
-            _render_doc_editor("business", "Business Brief")
+            _render_doc_editor("support", "Combined Support Guide", "release")
+            _render_doc_editor("business", "Combined Business Brief", "release")
+            _render_doc_editor("support", "Support Guide", _target_card.id, _target_card)
+            _render_doc_editor("business", "Business Brief", _target_card.id, _target_card)
 
 _init_state()
 if not getattr(st, "IS_SHIM", False):

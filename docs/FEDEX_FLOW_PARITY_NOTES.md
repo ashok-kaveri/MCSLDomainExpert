@@ -26,6 +26,7 @@ Parity does not mean:
 
 MCSL now follows the FedEx-style sequence:
 - `Load Cards`
+- select a subset before loading when QA only wants part of a list
 - auto-run validation, diagnosis, and release analysis
 - show `Release Intelligence`
 - show `Step 1: Card Requirements`
@@ -35,6 +36,9 @@ MCSL now follows the FedEx-style sequence:
 
 Important MCSL-specific difference:
 - toggle flow is richer and app-state-aware, and should stay different from FedEx
+
+Shared parity affordance:
+- after loading, QA can edit the active card subset from every pipeline tab while preserving the original loaded-card list
 
 ### Generate TC
 

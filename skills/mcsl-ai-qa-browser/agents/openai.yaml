@@ -1,0 +1,3 @@
+display_name: MCSL AI QA Browser
+short_description: Verify dashboard-generated MCSL test cases in the real browser with Computer Use, automation knowledge, and safe cleanup. Ask QA before running explicit non-Shopify cards through the current Shopify/MCSL flow.
+default_prompt: Verify this MCSL test case in the real browser using Computer Use, reuse the dashboard AI QA Verifier flow and existing automation patterns, ask QA when a non-Shopify platform is explicitly mentioned, and give me a concise pass/fail result with evidence and cleanup status. If QA confirms, run the available Shopify/MCSL flow and keep the reported platform visible in evidence.

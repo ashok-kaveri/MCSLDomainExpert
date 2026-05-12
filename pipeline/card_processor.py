@@ -53,6 +53,15 @@ _DEFAULT_REVIEW_STATE: dict[str, object] = {
 _REVIEW_STATE = threading.local()
 _LLM_TIMEOUT_SECONDS = int(os.environ.get("MCSL_LLM_TIMEOUT_SECONDS", "90"))
 
+PLATFORM_KEYWORDS: dict[str, tuple[str, ...]] = {
+    "Shopify": ("shopify", "shopify admin", "shopify mcsl", "ph multi carrier shipping label"),
+    "WooCommerce": ("woocommerce", "woo commerce", "wordpress"),
+    "BigCommerce": ("bigcommerce", "big commerce"),
+    "Magento": ("magento", "magento 2", "magento marketplace"),
+    "PrestaShop": ("prestashop", "presta shop"),
+}
+NON_SHOPIFY_PLATFORMS = {"WooCommerce", "BigCommerce", "Magento", "PrestaShop"}
+
 
 def _make_llm(
     model: str | None = None,
@@ -145,14 +154,15 @@ class TestCaseRow:
 # ---------------------------------------------------------------------------
 
 AC_WRITER_PROMPT = """\
-You are a senior QA lead for the MCSL (Multi-Carrier Shipping Labels) Shopify App by PluginHive.
+You are a senior QA lead for PluginHive MCSL (Multi-Carrier Shipping Labels) across Shopify, WooCommerce, BigCommerce, Magento, and PrestaShop.
 The app supports FedEx, UPS, DHL, USPS, and other carriers.
-Navigation: ORDERS tab flow, App Settings → Carriers → Add/Edit.
+Navigation must match the detected customer/test platform from the card or ticket. Default to Shopify when no platform is explicit; do not use Shopify Admin steps for WooCommerce, BigCommerce, Magento, or PrestaShop cards.
 Never write ACs for mobile viewports.
 
 Work research-first, not card-text-first.
 Before writing the final AC, ground yourself in the structured brief below:
 - card type
+- customer/test platform scope
 - linked references
 - linked handoff summary
 - customer issue or merchant-impact signals
@@ -164,6 +174,8 @@ Source-of-truth rules:
 - If the linked Trello/Zendesk handoff contains concrete carrier, customer, workflow, or broken-behaviour facts, those facts override generic carrier/customs patterns.
 - If Trello comments conflict with the linked handoff / linked reference card, prefer the linked handoff facts and treat the conflicting comment as stale or untrusted.
 - Do NOT introduce a carrier, toggle, field, button, setting, or workflow unless it is supported by the raw request, linked references, developer/QA comments, or research context.
+- If the card/ticket identifies WooCommerce, BigCommerce, Magento, or PrestaShop, write AC around that platform's store/admin/checkout flow and mention shared MCSL implementation only as a scope note.
+- If no platform is explicit, use Shopify as the default QA/support platform.
 - If the raw request / linked references say UPS and the research only gives generic customs context, stay with UPS. Do not expand to FedEx/DHL just because the topic is international/customs.
 - If the evidence describes a bug fix, keep the AC anchored to the same broken-vs-fixed behavior. Do not rewrite it into a broader feature proposal.
 - Do not expand a product-management or CSV bulk-update issue into order-level import/export, request-log, label-artifact, or tracking scenarios unless the linked handoff explicitly requires that downstream scope.
@@ -193,15 +205,16 @@ Each AC must be testable via the MCSL app UI.
 """
 
 TEST_CASE_PROMPT = """\
-You are a senior QA engineer for the MCSL (Multi-Carrier Shipping Labels) Shopify App by PluginHive.
+You are a senior QA engineer for PluginHive MCSL (Multi-Carrier Shipping Labels) across Shopify, WooCommerce, BigCommerce, Magento, and PrestaShop.
 The app supports FedEx, UPS, DHL, USPS, and other carriers.
-Navigation: ORDERS tab flow, App Settings → Carriers → Add/Edit.
+Navigation must match the detected customer/test platform from the card or ticket. Default to Shopify when no platform is explicit; do not use Shopify Admin steps for WooCommerce, BigCommerce, Magento, or PrestaShop cards.
 
 Work from real MCSL behaviour, not generic shipping assumptions.
 Use the carrier scope, QA knowledge, automation context, code context, and retrospective QA learnings when they help.
 Do not write mobile / responsive / viewport test cases.
 Do not invent carriers, toggles, fields, buttons, or workflows that are not supported by the current AC, card description, linked references, or provided research context.
 If the card/AC is carrier-specific, keep all test cases inside that carrier scope unless explicit regression evidence requires a broader check.
+If the card/ticket names WooCommerce, BigCommerce, Magento, or PrestaShop, include that platform in Preconditions and steps. If no platform is explicit, use Shopify. If the implementation is shared but the customer reported the issue on one platform, test on that platform and mention shared-platform regression only when AC requires it.
 
 IMPORTANT: Use EXACTLY this format for each test case:
 ### TC-{{n}}: {{scenario title}}
@@ -217,8 +230,8 @@ Then {{expected result}}
 Rules:
 - Write at least 4 useful test cases unless the card is extremely narrow.
 - Include a balanced mix of Positive / Negative / Edge coverage.
-- Make Preconditions explicit for setup such as carrier config, product data, packaging settings, order state, Shopify state, request-log validation, or toggle enablement.
-- Keep steps executable in the MCSL app, Shopify Admin, or API flow where relevant.
+- Make Preconditions explicit for setup such as carrier config, product data, packaging settings, order state, platform store/admin state, request-log validation, or toggle enablement.
+- Keep steps executable in the detected platform admin/storefront, the MCSL app, request/response logs, or API flow where relevant.
 - Reuse exact app/navigation terms when possible.
 - When source code context is provided, align with real field names, validations, service mapping, and error handling.
 - Use Trello comments for rollout notes, toggle details, and implementation constraints only when they do not conflict with the linked handoff or current AC scope.
@@ -241,7 +254,7 @@ Current AC / user story text:
 """
 
 TEST_CASE_REVIEW_PROMPT = """\
-You are reviewing generated QA test cases for the MCSL Shopify App.
+You are reviewing generated QA test cases for PluginHive MCSL across Shopify, WooCommerce, BigCommerce, Magento, and PrestaShop.
 
 Return ONLY JSON in this exact shape:
 {{
@@ -255,6 +268,7 @@ Review for:
 - fewer than 4 useful test cases
 - vague or untestable steps / expected results
 - missing prerequisites
+- platform drift, especially Shopify Admin steps on WooCommerce, BigCommerce, Magento, or PrestaShop cards
 - duplicate or overlapping scenarios
 - missing important AC coverage
 - invalid formatting against the required TC template
@@ -318,7 +332,7 @@ Keep the exact TC format:
 """
 
 AC_REVIEW_PROMPT = """\
-You are reviewing generated Acceptance Criteria for the MCSL Shopify App.
+You are reviewing generated Acceptance Criteria for PluginHive MCSL across Shopify, WooCommerce, BigCommerce, Magento, and PrestaShop.
 
 Return ONLY JSON in this exact shape:
 {{
@@ -331,6 +345,7 @@ Review for:
 - duplicate or overlapping scenarios
 - vague expected results that are not testable
 - missing prerequisites or setup assumptions
+- platform drift, especially Shopify Admin assumptions when the card/ticket is WooCommerce, BigCommerce, Magento, or PrestaShop
 - unsupported claims not grounded in the structured brief or research
 - missing regression or customer-impact scenarios for bug-style requests
 - missing toggle prerequisites when a toggle or feature flag is involved
@@ -454,6 +469,60 @@ def _friendly_ref(url: str) -> str:
     return host or "reference"
 
 
+def detect_platform_scope(*texts: str) -> list[str]:
+    """Detect the customer/test platform, defaulting to Shopify when not explicit."""
+    combined = "\n".join(text or "" for text in texts).lower()
+    found: list[str] = []
+    for platform, keywords in PLATFORM_KEYWORDS.items():
+        if any(keyword in combined for keyword in keywords):
+            found.append(platform)
+    if not found:
+        found.append("Shopify")
+    return found
+
+
+def platform_scope_brief(*texts: str) -> str:
+    """Return a prompt-ready platform scope note."""
+    platforms = detect_platform_scope(*texts)
+    if platforms:
+        joined = ", ".join(platforms)
+        return (
+            f"Detected customer/test platform: {joined}. Use this platform in AC/TC/documentation navigation and "
+            "preconditions. If WooCommerce, BigCommerce, Magento, or PrestaShop is explicitly detected, do not use Shopify Admin steps. "
+            "If no non-Shopify platform is detected, Shopify is the default QA/support platform. The feature can still be "
+            "treated as shared MCSL behavior unless the card limits the scope."
+        )
+
+
+def shopify_automation_scope(*texts: str, qa_confirmed: bool = False) -> tuple[bool, list[str], str]:
+    """Return whether current AI QA/automation can execute this platform scope.
+
+    AC/TC/docs can be platform-aware across PluginHive platforms, but the live
+    AI QA browser and Playwright automation stack currently run only against the
+    Shopify MCSL app/automation repo. If a card names another platform, QA must
+    confirm whether a Shopify-equivalent execution is acceptable because most
+    MCSL features are shared across platforms.
+    """
+    platforms = detect_platform_scope(*texts)
+    non_shopify = [platform for platform in platforms if platform in NON_SHOPIFY_PLATFORMS]
+    if non_shopify:
+        joined = ", ".join(non_shopify)
+        if qa_confirmed:
+            return (
+                True,
+                platforms,
+                f"QA confirmed execution for {joined}. Run the available Shopify/MCSL AI QA or automation flow, "
+                f"but keep the reported platform ({joined}) visible in evidence and comments.",
+            )
+        return (
+            False,
+            platforms,
+            f"This card mentions {joined}. Ask QA whether to execute it through the available Shopify/MCSL flow. "
+            f"If QA confirms, run AI QA/automation with {joined} noted as the reported customer platform.",
+        )
+    return True, platforms, "Shopify AI QA/automation execution is supported."
+
+
 def _classify_card_type(raw_request: str, research_context: str, comments_context: str = "") -> str:
     anchored_text = f"{raw_request}\n{research_context}".lower()
     full_text = f"{raw_request}\n{research_context}\n{comments_context}".lower()
@@ -559,6 +628,7 @@ def _build_generation_brief(
 
     card_type = _classify_card_type(raw_request, research_context, f"{comments_context}\n{labels_context}")
     prerequisites = _extract_prerequisites(raw_request, research_context, checklists or [], f"{comments_context}\n{labels_context}")
+    platform_brief = platform_scope_brief(raw_request, research_context, comments_context, labels_context)
 
     try:
         from pipeline.slack_client import detect_toggles
@@ -574,6 +644,7 @@ def _build_generation_brief(
         "3. Use only supported MCSL flows and avoid inventing carrier-only rules without evidence.",
         "",
         f"Card type: {card_type}",
+        platform_brief,
     ]
 
     if toggles:
@@ -714,6 +785,13 @@ def generate_test_cases(card, model: str | None = None, ac_text: str | None = No
     dev_comments_section = _build_dev_comments_section(comments)
 
     labels_hint = _labels_carrier_hint(getattr(card, "labels", None))
+    platform_context = platform_scope_brief(
+        card.name,
+        _requirements_text,
+        comments_text,
+        _labels_text,
+        ac_text_str,
+    )
 
     # Fetch all context sections in parallel to avoid sequential Ollama embedding calls.
     from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -738,9 +816,9 @@ def generate_test_cases(card, model: str | None = None, ac_text: str | None = No
         feedback_context_section = _f_feedback.result()
 
     carrier_context_section = (
-        f"\nCarrier / platform context:\n{carrier_context}\n"
+        f"\nCarrier / platform context:\n{carrier_context}\n\n{platform_context}\n"
         if carrier_context and carrier_context != "Carrier scope unavailable."
-        else ""
+        else f"\nPlatform context:\n{platform_context}\n"
     )
 
     ctx_parts = []
@@ -925,7 +1003,7 @@ def _build_rag_context_section_cached(card_name: str, card_desc: str) -> str:
 
 
 def _build_code_context_section(card_name: str, card_desc: str) -> str:
-    """Query indexed MCSL code for automation, backend, and frontend context."""
+    """Query indexed MCSL code for automation and StorePep app context."""
     return _build_code_context_section_cached(card_name or "", card_desc or "")
 
 
@@ -943,9 +1021,9 @@ def _build_code_context_section_cached(card_name: str, card_desc: str) -> str:
         _source_specs = [
             (st, lbl, lim, sl)
             for st, lbl, lim, sl in (
-                ("automation", "Existing automation test patterns", 3, 600),
-                ("backend",    "Backend implementation",            3, 600),
-                ("frontend",   "Frontend implementation",           2, 500),
+                ("automation",         "Existing automation test patterns",  3, 600),
+                ("storepepsaas_server","StorePep server implementation",     3, 600),
+                ("storepepsaas_client","StorePep client implementation",     2, 500),
             )
             if stats.get(st, 0) > 0
         ]
