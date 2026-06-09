@@ -15,8 +15,8 @@ It is separate from `mcsl-ai-qa-testcase-prep`:
 
 Before doing anything:
 
-1. Read `/Users/madan/Documents/MCSLDomainExpert/AGENTS.md`.
-2. Read `/Users/madan/Documents/MCSLDomainExpert/skills/mcsl-dashboard-tc-publisher/references/dashboard_tc_formats.md` when exact formats are needed.
+1. Read `AGENTS.md`.
+2. Read `skills/mcsl-dashboard-tc-publisher/references/dashboard_tc_formats.md` when exact formats are needed.
 
 ## Execution Path
 

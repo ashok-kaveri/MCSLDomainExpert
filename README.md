@@ -16,7 +16,7 @@ The dashboard helps QA move a release through these stages:
 7. prepare sign-off and handoff output
 
 Entrypoint:
-- [pipeline_dashboard.py](/Users/madan/Documents/MCSLDomainExpert/pipeline_dashboard.py:1)
+- [pipeline_dashboard.py](pipeline_dashboard.py:1)
 
 ## Current Dashboard Tabs
 
@@ -48,7 +48,7 @@ QA can narrow the loaded cards before `Load Cards`, then adjust the active-card 
 
 ## Codex / Claude Skill Bundle
 
-Repo-local MCSL skills live under [skills](/Users/madan/Documents/MCSLDomainExpert/skills:1). They mirror the FedEx Domain Expert skill pipeline but use MCSL-native app paths, evidence rules, automation repo paths, labels, and support-doc structure.
+Repo-local MCSL skills live under [skills](skills:1). They mirror the FedEx Domain Expert skill pipeline but use MCSL-native app paths, evidence rules, automation repo paths, labels, and support-doc structure.
 
 Core cycle:
 1. `mcsl-domain-core`
@@ -67,7 +67,7 @@ Maintenance and external workflow helpers:
 - `mcsl-knowledge-maintainer`
 - `mcsl-slack-operator`
 
-When dashboard behavior changes materially, update the matching skill alongside [AGENTS.md](/Users/madan/Documents/MCSLDomainExpert/AGENTS.md:1) and this README.
+When dashboard behavior changes materially, update the matching skill alongside [AGENTS.md](AGENTS.md:1) and this README.
 
 ### `🧾 Validate AC`
 - select Trello board, list, and release label
@@ -150,29 +150,29 @@ Current behavior:
 - poll for confirmation and unblock QA when confirmed
 
 Key files:
-- [pipeline/toggle_state.py](/Users/madan/Documents/MCSLDomainExpert/pipeline/toggle_state.py:1)
-- [tests/test_toggle_state.py](/Users/madan/Documents/MCSLDomainExpert/tests/test_toggle_state.py:1)
+- [pipeline/toggle_state.py](pipeline/toggle_state.py:1)
+- [tests/test_toggle_state.py](tests/test_toggle_state.py:1)
 
 ### Automation Matching
 
 Automation generation should prefer updating existing MCSL automation when a matching area already exists.
 
 Key files:
-- [pipeline/automation_writer.py](/Users/madan/Documents/MCSLDomainExpert/pipeline/automation_writer.py:1)
-- [pipeline/feature_detector.py](/Users/madan/Documents/MCSLDomainExpert/pipeline/feature_detector.py:1)
+- [pipeline/automation_writer.py](pipeline/automation_writer.py:1)
+- [pipeline/feature_detector.py](pipeline/feature_detector.py:1)
 
 ## Important Files
 
-- [pipeline_dashboard.py](/Users/madan/Documents/MCSLDomainExpert/pipeline_dashboard.py:1)
-- [pipeline/card_processor.py](/Users/madan/Documents/MCSLDomainExpert/pipeline/card_processor.py:1)
-- [pipeline/smart_ac_verifier.py](/Users/madan/Documents/MCSLDomainExpert/pipeline/smart_ac_verifier.py:1)
-- [pipeline/domain_validator.py](/Users/madan/Documents/MCSLDomainExpert/pipeline/domain_validator.py:1)
-- [pipeline/automation_writer.py](/Users/madan/Documents/MCSLDomainExpert/pipeline/automation_writer.py:1)
-- [pipeline/feature_detector.py](/Users/madan/Documents/MCSLDomainExpert/pipeline/feature_detector.py:1)
-- [pipeline/doc_generator.py](/Users/madan/Documents/MCSLDomainExpert/pipeline/doc_generator.py:1)
-- [pipeline/bug_tracker.py](/Users/madan/Documents/MCSLDomainExpert/pipeline/bug_tracker.py:1)
-- [pipeline/request_expectations.py](/Users/madan/Documents/MCSLDomainExpert/pipeline/request_expectations.py:1)
-- [pipeline/carrier_knowledge.py](/Users/madan/Documents/MCSLDomainExpert/pipeline/carrier_knowledge.py:1)
+- [pipeline_dashboard.py](pipeline_dashboard.py:1)
+- [pipeline/card_processor.py](pipeline/card_processor.py:1)
+- [pipeline/smart_ac_verifier.py](pipeline/smart_ac_verifier.py:1)
+- [pipeline/domain_validator.py](pipeline/domain_validator.py:1)
+- [pipeline/automation_writer.py](pipeline/automation_writer.py:1)
+- [pipeline/feature_detector.py](pipeline/feature_detector.py:1)
+- [pipeline/doc_generator.py](pipeline/doc_generator.py:1)
+- [pipeline/bug_tracker.py](pipeline/bug_tracker.py:1)
+- [pipeline/request_expectations.py](pipeline/request_expectations.py:1)
+- [pipeline/carrier_knowledge.py](pipeline/carrier_knowledge.py:1)
 
 ## Local References
 
@@ -185,7 +185,7 @@ Expected local automation repo:
 ## Run Locally
 
 ```bash
-cd /Users/madan/Documents/MCSLDomainExpert
+cd "$MCSL_REPO"  # path to your MCSLDomainExpert clone
 PYTHONPATH=. .venv/bin/streamlit run pipeline_dashboard.py
 ```
 
@@ -201,11 +201,11 @@ pytest -q tests/test_toggle_state.py
 
 ## Supporting Docs
 
-- [CLAUDE.md](/Users/madan/Documents/MCSLDomainExpert/CLAUDE.md:1)
-- [docs/FEDEX_FLOW_PARITY_NOTES.md](/Users/madan/Documents/MCSLDomainExpert/docs/FEDEX_FLOW_PARITY_NOTES.md:1)
-- [docs/MCSL_PLATFORM_ADAPTATION_PLAN.md](/Users/madan/Documents/MCSLDomainExpert/docs/MCSL_PLATFORM_ADAPTATION_PLAN.md:1)
-- [docs/MCSL_CARRIER_KNOWLEDGE_RESEARCH.md](/Users/madan/Documents/MCSLDomainExpert/docs/MCSL_CARRIER_KNOWLEDGE_RESEARCH.md:1)
-- [docs/MCSL_CARRIER_SUPPORT_REGISTRY.md](/Users/madan/Documents/MCSLDomainExpert/docs/MCSL_CARRIER_SUPPORT_REGISTRY.md:1)
-- [docs/MCSL_CARRIER_CAPABILITY_MATRIX.md](/Users/madan/Documents/MCSLDomainExpert/docs/MCSL_CARRIER_CAPABILITY_MATRIX.md:1)
-- [docs/MCSL_CARRIER_REQUEST_REGISTRY.md](/Users/madan/Documents/MCSLDomainExpert/docs/MCSL_CARRIER_REQUEST_REGISTRY.md:1)
-- [docs/NEW_CARRIER_VALIDATION_PLAN.md](/Users/madan/Documents/MCSLDomainExpert/docs/NEW_CARRIER_VALIDATION_PLAN.md:1)
+- [CLAUDE.md](CLAUDE.md:1)
+- [docs/FEDEX_FLOW_PARITY_NOTES.md](docs/FEDEX_FLOW_PARITY_NOTES.md:1)
+- [docs/MCSL_PLATFORM_ADAPTATION_PLAN.md](docs/MCSL_PLATFORM_ADAPTATION_PLAN.md:1)
+- [docs/MCSL_CARRIER_KNOWLEDGE_RESEARCH.md](docs/MCSL_CARRIER_KNOWLEDGE_RESEARCH.md:1)
+- [docs/MCSL_CARRIER_SUPPORT_REGISTRY.md](docs/MCSL_CARRIER_SUPPORT_REGISTRY.md:1)
+- [docs/MCSL_CARRIER_CAPABILITY_MATRIX.md](docs/MCSL_CARRIER_CAPABILITY_MATRIX.md:1)
+- [docs/MCSL_CARRIER_REQUEST_REGISTRY.md](docs/MCSL_CARRIER_REQUEST_REGISTRY.md:1)
+- [docs/NEW_CARRIER_VALIDATION_PLAN.md](docs/NEW_CARRIER_VALIDATION_PLAN.md:1)

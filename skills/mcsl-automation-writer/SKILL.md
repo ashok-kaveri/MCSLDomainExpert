@@ -23,14 +23,14 @@ For cards explicitly scoped to WooCommerce, BigCommerce, Magento, or PrestaShop,
 
 Before writing automation:
 
-1. Read `/Users/madan/Documents/MCSLDomainExpert/AGENTS.md`.
+1. Read `AGENTS.md`.
 2. Read:
-   - `/Users/madan/Documents/MCSLDomainExpert/skills/mcsl-automation-writer/references/automation_flow.md`
-   - `/Users/madan/Documents/MCSLDomainExpert/skills/mcsl-automation-writer/references/locator_trace_handoff.md`
+   - `skills/mcsl-automation-writer/references/automation_flow.md`
+   - `skills/mcsl-automation-writer/references/locator_trace_handoff.md`
 3. Inspect only directly relevant project files:
-   - `/Users/madan/Documents/MCSLDomainExpert/pipeline/automation_writer.py`
-   - `/Users/madan/Documents/MCSLDomainExpert/pipeline/chrome_agent.py`
-   - `/Users/madan/Documents/MCSLDomainExpert/pipeline/test_runner.py`
+   - `pipeline/automation_writer.py`
+   - `pipeline/chrome_agent.py`
+   - `pipeline/test_runner.py`
 4. Inspect the automation repo under `MCSL_AUTOMATION_REPO_PATH`.
 
 Do not hardcode automation paths. Use `.env` / `config.MCSL_AUTOMATION_REPO_PATH`.
@@ -77,7 +77,7 @@ If no saved trace exists:
 1. Use Computer Use to open the browser and manually execute the same flow.
 2. Capture visible headings/buttons/labels/inputs/toggles and iframe context.
 3. Save the trace using:
-   `/Users/madan/Documents/MCSLDomainExpert/skills/mcsl-automation-writer/scripts/save_locator_trace.py`
+   `skills/mcsl-automation-writer/scripts/save_locator_trace.py`
 
 The automation writer should use locator traces as supporting evidence, not blindly. Existing POM methods still win.
 

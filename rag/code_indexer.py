@@ -29,6 +29,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import sqlite3
 import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
@@ -378,6 +379,67 @@ def get_index_stats() -> dict:
     up-to-date counts after index_codebase() or sync_from_git() completes.
     The cached wrapper is reset first so both share a consistent view.
     """
+    def _empty_stats(error: str = "") -> dict:
+        return {"storepepsaas_server": 0, "storepepsaas_client": 0,
+                "automation": 0, "total": 0,
+                "server_sync": {}, "client_sync": {}, "automation_sync": {},
+                "error": error}
+
+    def _stats_from_sqlite(error: str = "") -> dict:
+        """Read metadata counts directly when Chroma's HNSW files cannot load."""
+        db_path = Path(config.CHROMA_PATH) / "chroma.sqlite3"
+        if not db_path.exists():
+            return _empty_stats(error)
+
+        sync_state = _load_sync_state()
+        counts = {
+            "storepepsaas_server": 0,
+            "storepepsaas_client": 0,
+            "automation": 0,
+        }
+        total = 0
+        try:
+            with sqlite3.connect(db_path) as conn:
+                total = conn.execute(
+                    """
+                    SELECT COUNT(*)
+                    FROM embeddings e
+                    JOIN segments s ON e.segment_id = s.id
+                    JOIN collections c ON s.collection = c.id
+                    WHERE c.name = ?
+                    """,
+                    (config.CHROMA_CODE_COLLECTION,),
+                ).fetchone()[0]
+                rows = conn.execute(
+                    """
+                    SELECT m.string_value, COUNT(*)
+                    FROM embeddings e
+                    JOIN segments s ON e.segment_id = s.id
+                    JOIN collections c ON s.collection = c.id
+                    JOIN embedding_metadata m ON m.id = e.id AND m.key = 'source_type'
+                    WHERE c.name = ?
+                    GROUP BY m.string_value
+                    """,
+                    (config.CHROMA_CODE_COLLECTION,),
+                ).fetchall()
+            for source_type, count in rows:
+                if source_type in counts:
+                    counts[source_type] = count
+        except Exception as sqlite_exc:
+            logger.warning("SQLite fallback for code index stats failed: %s", sqlite_exc)
+            return _empty_stats(error or str(sqlite_exc))
+
+        return {
+            "storepepsaas_server":  counts["storepepsaas_server"],
+            "storepepsaas_client":  counts["storepepsaas_client"],
+            "automation":           counts["automation"],
+            "total":                total,
+            "server_sync":          sync_state.get("storepepsaas_server", {}),
+            "client_sync":          sync_state.get("storepepsaas_client", {}),
+            "automation_sync":      sync_state.get("automation", {}),
+            "error":                error,
+        }
+
     try:
         # Reset the cached wrapper so subsequent searches also see fresh data
         _reset_code_vectorstore()
@@ -385,10 +447,7 @@ def get_index_stats() -> dict:
         try:
             col = client.get_collection(config.CHROMA_CODE_COLLECTION)
         except Exception:
-            return {"storepepsaas_server": 0, "storepepsaas_client": 0,
-                    "automation": 0, "total": 0,
-                    "server_sync": {}, "client_sync": {}, "automation_sync": {},
-                    "error": ""}
+            return _stats_from_sqlite()
 
         total = col.count()
 
@@ -415,10 +474,7 @@ def get_index_stats() -> dict:
         }
     except Exception as e:
         logger.warning("get_index_stats failed: %s", e)
-        return {"storepepsaas_server": 0, "storepepsaas_client": 0,
-                "automation": 0, "total": 0,
-                "server_sync": {}, "client_sync": {}, "automation_sync": {},
-                "error": str(e)}
+        return _stats_from_sqlite(str(e))
 
 
 # ---------------------------------------------------------------------------

@@ -20,9 +20,9 @@ It should make Codex/Claude behave like the project Domain Expert:
 
 Always start with:
 
-1. `/Users/madan/Documents/MCSLDomainExpert/AGENTS.md`
-2. `/Users/madan/Documents/MCSLDomainExpert/CLAUDE.md` if extra session context is needed
-3. `/Users/madan/Documents/MCSLDomainExpert/skills/mcsl-domain-core/references/research_workflow.md`
+1. `AGENTS.md`
+2. `CLAUDE.md` if extra session context is needed
+3. `skills/mcsl-domain-core/references/research_workflow.md`
 
 Then read only the project files directly relevant to the task.
 

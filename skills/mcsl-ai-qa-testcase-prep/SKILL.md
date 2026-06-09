@@ -9,11 +9,11 @@ Use this skill when the user wants strong, detailed test cases before browser te
 
 This skill is the preparation companion to:
 
-- `/Users/madan/Documents/MCSLDomainExpert/skills/mcsl-ai-qa-browser/SKILL.md`
+- `skills/mcsl-ai-qa-browser/SKILL.md`
 
 This skill is for **AI QA execution input**, not release publishing.
 
-Use `/Users/madan/Documents/MCSLDomainExpert/skills/mcsl-dashboard-tc-publisher/SKILL.md` when the user wants:
+Use `skills/mcsl-dashboard-tc-publisher/SKILL.md` when the user wants:
 
 - the compact Trello QA comment format
 - CSV / Google Sheet rows
@@ -42,12 +42,12 @@ The output should stay detailed. Do not collapse cases into one-line summaries f
 
 Before generating test cases:
 
-1. Read `/Users/madan/Documents/MCSLDomainExpert/AGENTS.md`.
+1. Read `AGENTS.md`.
 2. Read only the directly relevant project files:
-   - `/Users/madan/Documents/MCSLDomainExpert/pipeline/card_processor.py`
-   - `/Users/madan/Documents/MCSLDomainExpert/pipeline/trello_client.py`
-   - `/Users/madan/Documents/MCSLDomainExpert/pipeline/smart_ac_verifier.py`
-   - `/Users/madan/Documents/MCSLDomainExpert/pipeline_dashboard.py`
+   - `pipeline/card_processor.py`
+   - `pipeline/trello_client.py`
+   - `pipeline/smart_ac_verifier.py`
+   - `pipeline_dashboard.py`
 3. Treat these as the source of truth for:
    - AC and TC generation style
    - browser-verifiable scenario selection
@@ -62,7 +62,7 @@ Important execution boundary:
 
 Also use the automation repo as a verification-design reference:
 
-- `/Users/madan/Documents/mcsl-test-automation`
+- `$MCSL_AUTOMATION_REPO_PATH`
 
 Search that repo for similar scenarios before inventing new test structure.
 

@@ -56,7 +56,7 @@ Common navigation patterns in MCSL:
 ## Current Implementation
 
 Shared carrier knowledge is implemented in:
-- [pipeline/carrier_knowledge.py](/Users/madan/Documents/MCSLDomainExpert/pipeline/carrier_knowledge.py:1)
+- [pipeline/carrier_knowledge.py](pipeline/carrier_knowledge.py:1)
 
 It provides:
 - supported carrier profiles
@@ -66,11 +66,11 @@ It provides:
 - carrier env path resolution for automation order creation
 
 It is currently used by:
-- [pipeline/user_story_writer.py](/Users/madan/Documents/MCSLDomainExpert/pipeline/user_story_writer.py:1)
-- [pipeline/domain_validator.py](/Users/madan/Documents/MCSLDomainExpert/pipeline/domain_validator.py:1)
-- [pipeline/smart_ac_verifier.py](/Users/madan/Documents/MCSLDomainExpert/pipeline/smart_ac_verifier.py:1)
-- [pipeline/order_creator.py](/Users/madan/Documents/MCSLDomainExpert/pipeline/order_creator.py:1)
-- [pipeline/handoff_docs.py](/Users/madan/Documents/MCSLDomainExpert/pipeline/handoff_docs.py:1)
+- [pipeline/user_story_writer.py](pipeline/user_story_writer.py:1)
+- [pipeline/domain_validator.py](pipeline/domain_validator.py:1)
+- [pipeline/smart_ac_verifier.py](pipeline/smart_ac_verifier.py:1)
+- [pipeline/order_creator.py](pipeline/order_creator.py:1)
+- [pipeline/handoff_docs.py](pipeline/handoff_docs.py:1)
 
 ## Practical Conclusion
 

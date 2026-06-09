@@ -35,19 +35,19 @@ Use `mcsl-trello-operator` for actual Trello reads/writes when the user asks to 
 
 Before writing:
 
-1. Read `/Users/madan/Documents/MCSLDomainExpert/AGENTS.md`.
+1. Read `AGENTS.md`.
 2. Use the MCSL domain core research workflow when the card needs domain facts beyond local context:
-   - `/Users/madan/Documents/MCSLDomainExpert/skills/mcsl-domain-core/SKILL.md`
-   - `/Users/madan/Documents/MCSLDomainExpert/skills/mcsl-domain-core/references/research_workflow.md`
+   - `skills/mcsl-domain-core/SKILL.md`
+   - `skills/mcsl-domain-core/references/research_workflow.md`
 3. Read the exact generation/review rules when needed:
-   - `/Users/madan/Documents/MCSLDomainExpert/skills/mcsl-ac-writer-reviewer/references/ac_generation_review.md`
+   - `skills/mcsl-ac-writer-reviewer/references/ac_generation_review.md`
 4. If toggle notification is requested, read:
-   - `/Users/madan/Documents/MCSLDomainExpert/skills/mcsl-ac-writer-reviewer/references/toggle_slack.md`
+   - `skills/mcsl-ac-writer-reviewer/references/toggle_slack.md`
 5. Inspect only directly relevant project files:
-   - `/Users/madan/Documents/MCSLDomainExpert/pipeline/card_processor.py`
-   - `/Users/madan/Documents/MCSLDomainExpert/pipeline/domain_validator.py`
-   - `/Users/madan/Documents/MCSLDomainExpert/pipeline/slack_client.py`
-   - `/Users/madan/Documents/MCSLDomainExpert/pipeline/requirement_research.py`
+   - `pipeline/card_processor.py`
+   - `pipeline/domain_validator.py`
+   - `pipeline/slack_client.py`
+   - `pipeline/requirement_research.py`
 
 ## Input
 

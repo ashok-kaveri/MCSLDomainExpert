@@ -22,14 +22,14 @@ It mirrors the dashboard `Bug Reporter` flow:
 
 Before acting:
 
-1. Read `/Users/madan/Documents/MCSLDomainExpert/AGENTS.md`.
+1. Read `AGENTS.md`.
 2. Read:
-   - `/Users/madan/Documents/MCSLDomainExpert/skills/mcsl-bug/references/bug_flow.md`
+   - `skills/mcsl-bug/references/bug_flow.md`
 3. Inspect only directly relevant files:
-   - `/Users/madan/Documents/MCSLDomainExpert/pipeline/bug_tracker.py`
-   - `/Users/madan/Documents/MCSLDomainExpert/pipeline/bug_reporter.py`
-   - `/Users/madan/Documents/MCSLDomainExpert/pipeline/trello_client.py`
-   - `/Users/madan/Documents/MCSLDomainExpert/pipeline_dashboard.py`
+   - `pipeline/bug_tracker.py`
+   - `pipeline/bug_reporter.py`
+   - `pipeline/trello_client.py`
+   - `pipeline_dashboard.py`
 
 ## Inputs
 

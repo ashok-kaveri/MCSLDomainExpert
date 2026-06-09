@@ -21,12 +21,12 @@ Default release delivery is one combined PDF per document type. If the user asks
 
 Before generating:
 
-1. Read `/Users/madan/Documents/MCSLDomainExpert/AGENTS.md`.
+1. Read `AGENTS.md`.
 2. Read:
-   - `/Users/madan/Documents/MCSLDomainExpert/skills/mcsl-handoff-docs/references/handoff_doc_formats.md`
+   - `skills/mcsl-handoff-docs/references/handoff_doc_formats.md`
 3. Inspect only directly relevant project files:
-   - `/Users/madan/Documents/MCSLDomainExpert/pipeline/handoff_docs.py`
-   - `/Users/madan/Documents/MCSLDomainExpert/pipeline_dashboard.py`
+   - `pipeline/handoff_docs.py`
+   - `pipeline_dashboard.py`
 
 Use `mcsl-domain-core` research when local context is incomplete or customer-facing explanations need current MCSL/PluginHive/Shopify facts.
 Use `mcsl-trello-operator` to fetch card details/members or attach/comment PDFs when explicitly requested.
@@ -118,7 +118,7 @@ When the user asks for PDF:
 1. Generate the markdown first.
 2. Save the markdown under `data/handoff_docs/`.
 3. Render PDF using:
-   `/Users/madan/Documents/MCSLDomainExpert/skills/mcsl-handoff-docs/scripts/render_handoff_pdf.py`
+   `skills/mcsl-handoff-docs/scripts/render_handoff_pdf.py`
 
 For one requested release document, create one combined PDF containing all selected/approved release cards.
 

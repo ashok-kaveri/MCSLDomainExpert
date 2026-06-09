@@ -86,13 +86,13 @@ Already implemented:
 
 ## Important Current Files
 
-- [pipeline_dashboard.py](/Users/madan/Documents/MCSLDomainExpert/pipeline_dashboard.py:1)
-- [pipeline/card_processor.py](/Users/madan/Documents/MCSLDomainExpert/pipeline/card_processor.py:1)
-- [pipeline/smart_ac_verifier.py](/Users/madan/Documents/MCSLDomainExpert/pipeline/smart_ac_verifier.py:1)
-- [pipeline/automation_writer.py](/Users/madan/Documents/MCSLDomainExpert/pipeline/automation_writer.py:1)
-- [pipeline/feature_detector.py](/Users/madan/Documents/MCSLDomainExpert/pipeline/feature_detector.py:1)
-- [pipeline/toggle_state.py](/Users/madan/Documents/MCSLDomainExpert/pipeline/toggle_state.py:1)
-- [pipeline/bug_tracker.py](/Users/madan/Documents/MCSLDomainExpert/pipeline/bug_tracker.py:1)
+- [pipeline_dashboard.py](pipeline_dashboard.py:1)
+- [pipeline/card_processor.py](pipeline/card_processor.py:1)
+- [pipeline/smart_ac_verifier.py](pipeline/smart_ac_verifier.py:1)
+- [pipeline/automation_writer.py](pipeline/automation_writer.py:1)
+- [pipeline/feature_detector.py](pipeline/feature_detector.py:1)
+- [pipeline/toggle_state.py](pipeline/toggle_state.py:1)
+- [pipeline/bug_tracker.py](pipeline/bug_tracker.py:1)
 
 ## Current Improvement Areas
 
@@ -104,6 +104,6 @@ The highest-value remaining work is:
 ## Documentation Rule
 
 If workflow changes again, update this file together with:
-- [README.md](/Users/madan/Documents/MCSLDomainExpert/README.md:1)
-- [CLAUDE.md](/Users/madan/Documents/MCSLDomainExpert/CLAUDE.md:1)
-- [docs/FEDEX_FLOW_PARITY_NOTES.md](/Users/madan/Documents/MCSLDomainExpert/docs/FEDEX_FLOW_PARITY_NOTES.md:1)
+- [README.md](README.md:1)
+- [CLAUDE.md](CLAUDE.md:1)
+- [docs/FEDEX_FLOW_PARITY_NOTES.md](docs/FEDEX_FLOW_PARITY_NOTES.md:1)
