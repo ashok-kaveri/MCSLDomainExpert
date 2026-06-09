@@ -31,7 +31,7 @@ What it **does** need to do:
 ### MCSL automation repo
 
 Local repo:
-- `/Users/madan/Documents/mcsl-test-automation`
+- `$MCSL_AUTOMATION_REPO_PATH`
 
 Relevant capabilities already present:
 - create Shopify dev store
@@ -44,15 +44,15 @@ Relevant capabilities already present:
 - create orders from product IDs in env files
 
 Key references:
-- [/Users/madan/Documents/mcsl-test-automation/tests/onboardingFlow/createStoreAndInstallApp.spec.ts](/Users/madan/Documents/mcsl-test-automation/tests/onboardingFlow/createStoreAndInstallApp.spec.ts:1)
-- [/Users/madan/Documents/mcsl-test-automation/support/pages/createStore/createStorePage.ts](/Users/madan/Documents/mcsl-test-automation/support/pages/createStore/createStorePage.ts:1)
-- [/Users/madan/Documents/mcsl-test-automation/support/setup/login.setup.ts](/Users/madan/Documents/mcsl-test-automation/support/setup/login.setup.ts:1)
-- [/Users/madan/Documents/mcsl-test-automation/support/pages/shopifyAPI/createOrderAPI.ts](/Users/madan/Documents/mcsl-test-automation/support/pages/shopifyAPI/createOrderAPI.ts:1)
+- [$MCSL_AUTOMATION_REPO_PATH/tests/onboardingFlow/createStoreAndInstallApp.spec.ts]($MCSL_AUTOMATION_REPO_PATH/tests/onboardingFlow/createStoreAndInstallApp.spec.ts:1)
+- [$MCSL_AUTOMATION_REPO_PATH/support/pages/createStore/createStorePage.ts]($MCSL_AUTOMATION_REPO_PATH/support/pages/createStore/createStorePage.ts:1)
+- [$MCSL_AUTOMATION_REPO_PATH/support/setup/login.setup.ts]($MCSL_AUTOMATION_REPO_PATH/support/setup/login.setup.ts:1)
+- [$MCSL_AUTOMATION_REPO_PATH/support/pages/shopifyAPI/createOrderAPI.ts]($MCSL_AUTOMATION_REPO_PATH/support/pages/shopifyAPI/createOrderAPI.ts:1)
 
 ### Shopify actions repo
 
 Local repo:
-- `/Users/madan/Documents/shopify-actions `
+- `$SHOPIFY_ACTIONS_PATH`
 
 Relevant capabilities already present:
 - create Shopify products
@@ -62,9 +62,9 @@ Relevant capabilities already present:
 - deterministic API endpoints for product and order creation
 
 Key references:
-- [/Users/madan/Documents/shopify-actions /src/index.js](/Users/madan/Documents/shopify-actions%20/src/index.js:1)
-- [/Users/madan/Documents/shopify-actions /src/modules/Generator.js](/Users/madan/Documents/shopify-actions%20/src/modules/Generator.js:1)
-- [/Users/madan/Documents/shopify-actions /config.json](/Users/madan/Documents/shopify-actions%20/config.json:1)
+- [$SHOPIFY_ACTIONS_PATH/src/index.js]($SHOPIFY_ACTIONS_PATH%20/src/index.js:1)
+- [$SHOPIFY_ACTIONS_PATH/src/modules/Generator.js]($SHOPIFY_ACTIONS_PATH%20/src/modules/Generator.js:1)
+- [$SHOPIFY_ACTIONS_PATH/config.json]($SHOPIFY_ACTIONS_PATH%20/config.json:1)
 
 ## Existing Product Env Contract
 
@@ -81,9 +81,9 @@ Each entry uses:
 ```
 
 Confirmed from:
-- [/Users/madan/Documents/mcsl-test-automation/support/pages/shopifyAPI/createOrderAPI.ts](/Users/madan/Documents/mcsl-test-automation/support/pages/shopifyAPI/createOrderAPI.ts:39)
-- [/Users/madan/Documents/mcsl-test-automation/carrier-envs/ups.env](/Users/madan/Documents/mcsl-test-automation/carrier-envs/ups.env:1)
-- [/Users/madan/Documents/mcsl-test-automation/carrier-envs/packaging-fedexrest.env](/Users/madan/Documents/mcsl-test-automation/carrier-envs/packaging-fedexrest.env:1)
+- [$MCSL_AUTOMATION_REPO_PATH/support/pages/shopifyAPI/createOrderAPI.ts]($MCSL_AUTOMATION_REPO_PATH/support/pages/shopifyAPI/createOrderAPI.ts:39)
+- [$MCSL_AUTOMATION_REPO_PATH/carrier-envs/ups.env]($MCSL_AUTOMATION_REPO_PATH/carrier-envs/ups.env:1)
+- [$MCSL_AUTOMATION_REPO_PATH/carrier-envs/packaging-fedexrest.env]($MCSL_AUTOMATION_REPO_PATH/carrier-envs/packaging-fedexrest.env:1)
 
 ## Product Types Required
 

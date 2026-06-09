@@ -1983,6 +1983,7 @@ def main() -> None:
         _auto_sync  = _idx_stats.get("automation_sync", {})
         _mcsl_server_sync = _idx_stats.get("server_sync", {})
         _mcsl_client_sync = _idx_stats.get("client_sync", {})
+        _idx_error = _idx_stats.get("error", "")
 
         # Wiki chunk count lives in the knowledge collection (not code collection)
         _wiki_cnt = 0
@@ -2011,11 +2012,16 @@ def main() -> None:
         st.markdown(
             f"<div style='font-size:0.75rem;line-height:1.8'>"
             f"<b>✍️ Automation:</b> {_sync_badge(_auto_cnt, _auto_sync)}<br>"
-            f"<b>🏪 MCSL App:</b> ✅ {_mcsl_cnt} chunks{_mcsl_server_tag}{_mcsl_client_tag}<br>"
+            f"<b>🏪 MCSL App:</b> {_sync_badge(_mcsl_cnt, {})}{_mcsl_server_tag}{_mcsl_client_tag}<br>"
             f"<b>📖 Wiki:</b> {_wiki_badge(_wiki_cnt)}"
             f"</div>",
             unsafe_allow_html=True,
         )
+        if _idx_error:
+            st.warning(
+                "Code index metadata exists, but Chroma could not load the HNSW vector files. "
+                "Full re-index the affected source before relying on RAG search."
+            )
 
         # ── Automation Code ───────────────────────────────────────────────
         with st.expander("✍️ Automation Code"):

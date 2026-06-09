@@ -6,7 +6,7 @@ Comparison repo:
 - `../Fed-Ex-automation/FedexDomainExpert`
 
 MCSL source of truth:
-- [pipeline_dashboard.py](/Users/madan/Documents/MCSLDomainExpert/pipeline_dashboard.py:1)
+- [pipeline_dashboard.py](pipeline_dashboard.py:1)
 
 ## What Parity Means
 

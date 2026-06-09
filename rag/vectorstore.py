@@ -21,6 +21,15 @@ def get_embeddings() -> OllamaEmbeddings:
 
 _vectorstore_instance: Optional[Chroma] = None
 
+_COLLECTION_METADATA = {
+    "hnsw:space": "cosine",
+    "hnsw:construction_ef": 100,
+    "hnsw:search_ef": 100,
+    "hnsw:M": 16,
+    "hnsw:batch_size": 100,
+    "hnsw:sync_threshold": 1000,
+}
+
 
 def get_vectorstore() -> Chroma:
     global _vectorstore_instance
@@ -34,14 +43,7 @@ def get_vectorstore() -> Chroma:
             collection_name=config.CHROMA_COLLECTION,
             embedding_function=get_embeddings(),
             persist_directory=config.CHROMA_PATH,
-            collection_metadata={
-                "hnsw:space": "cosine",
-                "hnsw:construction_ef": 100,
-                "hnsw:search_ef": 100,
-                "hnsw:M": 16,
-                "hnsw:batch_size": 100,
-                "hnsw:sync_threshold": 1000,
-            },
+            collection_metadata=_COLLECTION_METADATA,
         )
     return _vectorstore_instance
 
@@ -50,6 +52,33 @@ def _reset_vectorstore() -> None:
     """Reset the cached vectorstore instance (used after clear_collection())."""
     global _vectorstore_instance
     _vectorstore_instance = None
+
+
+def _is_hnsw_index_error(exc: Exception) -> bool:
+    msg = str(exc).lower()
+    return "hnsw" in msg and (
+        "error loading" in msg
+        or "error creating" in msg
+        or "segment reader" in msg
+        or "backfill" in msg
+        or "compaction" in msg
+    )
+
+
+def _recreate_collection(reason: str) -> None:
+    """Drop the main knowledge collection after unrecoverable HNSW corruption."""
+    _reset_vectorstore()
+    client = chromadb.PersistentClient(path=config.CHROMA_PATH)
+    try:
+        client.delete_collection(config.CHROMA_COLLECTION)
+        logger.warning("Recreated ChromaDB collection after %s", reason)
+    except Exception as exc:
+        logger.debug(
+            "Collection delete during recreate raised (ok if missing): %s",
+            exc,
+        )
+    finally:
+        _reset_vectorstore()
 
 
 # Smaller batch size prevents ChromaDB HNSW from pre-allocating huge link_lists.bin
@@ -80,15 +109,34 @@ def add_documents(documents: list[Document]) -> None:
     documents = _deduplicate(documents)
     vectorstore = get_vectorstore()
     total = len(documents)
-    for start in range(0, total, _CHROMA_BATCH_SIZE):
+    start = 0
+    recovered = False
+    while start < total:
         batch = documents[start: start + _CHROMA_BATCH_SIZE]
-        vectorstore.add_documents(batch)
+        try:
+            vectorstore.add_documents(batch)
+        except Exception as exc:
+            if not _is_hnsw_index_error(exc):
+                raise
+            if recovered:
+                raise
+            logger.warning(
+                "ChromaDB HNSW index is corrupt while adding documents; "
+                "recreating collection and restarting current ingest: %s",
+                exc,
+            )
+            _recreate_collection("HNSW add failure")
+            vectorstore = get_vectorstore()
+            recovered = True
+            start = 0
+            continue
         logger.info(
             "Embedded batch %d–%d / %d",
             start + 1,
             min(start + _CHROMA_BATCH_SIZE, total),
             total,
         )
+        start += _CHROMA_BATCH_SIZE
     logger.info("Added %d documents to ChromaDB", total)
 
 
@@ -131,7 +179,19 @@ def upsert_documents(documents: list[Document], ids: list[str]) -> None:
     except Exception as exc:
         logger.debug("Delete before upsert raised (OK on first run): %s", exc)
     # Add with stable IDs so the next upsert can find and replace them
-    vectorstore.add_documents(documents, ids=ids)
+    try:
+        vectorstore.add_documents(documents, ids=ids)
+    except Exception as exc:
+        if not _is_hnsw_index_error(exc):
+            raise
+        logger.warning(
+            "ChromaDB HNSW index is corrupt while upserting documents; "
+            "recreating collection and retrying current upsert: %s",
+            exc,
+        )
+        _recreate_collection("HNSW upsert failure")
+        vectorstore = get_vectorstore()
+        vectorstore.add_documents(documents, ids=ids)
     logger.info("Upserted %d document(s) into ChromaDB", len(documents))
 
 
@@ -166,6 +226,15 @@ def delete_by_source_type(source_type: str) -> int:
             logger.info("Deleted %d chunk(s) with source_type=%r", len(ids), source_type)
         return len(ids)
     except Exception as e:
+        if _is_hnsw_index_error(e):
+            logger.warning(
+                "ChromaDB HNSW index is corrupt while deleting source_type=%r; "
+                "recreating main knowledge collection: %s",
+                source_type,
+                e,
+            )
+            _recreate_collection("HNSW source delete failure")
+            return 0
         logger.warning("delete_by_source_type(%r) failed: %s", source_type, e)
         return 0
 

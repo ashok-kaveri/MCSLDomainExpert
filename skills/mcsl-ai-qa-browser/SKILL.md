@@ -43,7 +43,7 @@ This skill is meant to cover the full Shopify MCSL QA surface, not only one scen
 
 Before taking action:
 
-1. Read `/Users/madan/Documents/MCSLDomainExpert/AGENTS.md`.
+1. Read `AGENTS.md`.
 2. Treat `AGENTS.md` as the source of truth for:
    - app architecture
    - ORDERS, Order Summary, settings, logs, and automation flows
@@ -51,10 +51,10 @@ Before taking action:
    - verification strategies
    - known bugs already fixed
 3. When the task touches orchestration or behavior, inspect only the files directly involved:
-   - `/Users/madan/Documents/MCSLDomainExpert/pipeline/smart_ac_verifier.py`
-   - `/Users/madan/Documents/MCSLDomainExpert/pipeline/order_creator.py`
-   - `/Users/madan/Documents/MCSLDomainExpert/pipeline_dashboard.py`
-   - `/Users/madan/Documents/MCSLDomainExpert/pipeline/rag_updater.py`
+   - `pipeline/smart_ac_verifier.py`
+   - `pipeline/order_creator.py`
+   - `pipeline_dashboard.py`
+   - `pipeline/rag_updater.py`
 4. When a generated TC includes `Execution Flow`, use it as the primary route hint:
    - `orders` / `label` → ORDERS tab, Order Id filter, Order Summary, Generate Label
    - `documents` / `logs` → Order Summary Label Summary / Rate Summary / Request Log evidence
@@ -120,20 +120,20 @@ For live app verification, prefer the real browser surface the user is already u
 
 Automation repo reference:
 
-- `/Users/madan/Documents/mcsl-test-automation`
+- `$MCSL_AUTOMATION_REPO_PATH`
 
 Important related page objects and specs:
 
-- `/Users/madan/Documents/mcsl-test-automation/support/pages/basePage.ts`
-- `/Users/madan/Documents/mcsl-test-automation/support/pages/orders/orderGridPage.ts`
-- `/Users/madan/Documents/mcsl-test-automation/support/pages/orders/orderSummaryPage.ts`
-- `/Users/madan/Documents/mcsl-test-automation/support/pages/products/editProductDetails.ts`
-- `/Users/madan/Documents/mcsl-test-automation/support/pages/automationRules/rateAutomationPage.ts`
-- `/Users/madan/Documents/mcsl-test-automation/support/pages/automationRules/labelAutomationPage.ts`
-- `/Users/madan/Documents/mcsl-test-automation/tests/orderGrid/`
-- `/Users/madan/Documents/mcsl-test-automation/tests/orderSummary/`
-- `/Users/madan/Documents/mcsl-test-automation/tests/specialServices/`
-- `/Users/madan/Documents/mcsl-test-automation/tests/automationRules/`
+- `$MCSL_AUTOMATION_REPO_PATH/support/pages/basePage.ts`
+- `$MCSL_AUTOMATION_REPO_PATH/support/pages/orders/orderGridPage.ts`
+- `$MCSL_AUTOMATION_REPO_PATH/support/pages/orders/orderSummaryPage.ts`
+- `$MCSL_AUTOMATION_REPO_PATH/support/pages/products/editProductDetails.ts`
+- `$MCSL_AUTOMATION_REPO_PATH/support/pages/automationRules/rateAutomationPage.ts`
+- `$MCSL_AUTOMATION_REPO_PATH/support/pages/automationRules/labelAutomationPage.ts`
+- `$MCSL_AUTOMATION_REPO_PATH/tests/orderGrid/`
+- `$MCSL_AUTOMATION_REPO_PATH/tests/orderSummary/`
+- `$MCSL_AUTOMATION_REPO_PATH/tests/specialServices/`
+- `$MCSL_AUTOMATION_REPO_PATH/tests/automationRules/`
 
 Also inspect matching specs or helpers for the current scenario before inventing a new flow. Search the automation repo first with `rg`.
 

@@ -21,6 +21,7 @@ _SOURCE_LABELS: dict[str, str] = {
     "storepepsaas_server": "StorePep SaaS Server Code",
     "storepepsaas_client": "StorePep SaaS Client Code",
     "automation":          "MCSL Test Automation Codebase",
+    "shopify_api_recipes": "Shopify Admin/Storefront API Recipes for MCSL QA",
 }
 
 logger = logging.getLogger(__name__)

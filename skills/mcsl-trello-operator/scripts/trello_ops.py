@@ -33,7 +33,7 @@ def _card_json(card: TrelloCard) -> dict[str, Any]:
         "name": card.name,
         "desc": card.desc,
         "list_id": card.list_id,
-        "list_name": card.list_name,
+        "list_name": getattr(card, "list_name", ""),
         "labels": card.labels,
         "url": card.url,
         "attachments": card.attachments,

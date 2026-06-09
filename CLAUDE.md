@@ -5,14 +5,14 @@ Working notes for future agents in this repo.
 ## Read This First
 
 If docs and code disagree, trust current code, especially:
-- [pipeline_dashboard.py](/Users/madan/Documents/MCSLDomainExpert/pipeline_dashboard.py:1)
+- [pipeline_dashboard.py](pipeline_dashboard.py:1)
 
 Use these docs as the current handoff set:
-- [README.md](/Users/madan/Documents/MCSLDomainExpert/README.md:1)
-- [docs/FEDEX_FLOW_PARITY_NOTES.md](/Users/madan/Documents/MCSLDomainExpert/docs/FEDEX_FLOW_PARITY_NOTES.md:1)
-- [docs/MCSL_PLATFORM_ADAPTATION_PLAN.md](/Users/madan/Documents/MCSLDomainExpert/docs/MCSL_PLATFORM_ADAPTATION_PLAN.md:1)
-- [docs/MCSL_CARRIER_KNOWLEDGE_RESEARCH.md](/Users/madan/Documents/MCSLDomainExpert/docs/MCSL_CARRIER_KNOWLEDGE_RESEARCH.md:1)
-- [docs/NEW_CARRIER_VALIDATION_PLAN.md](/Users/madan/Documents/MCSLDomainExpert/docs/NEW_CARRIER_VALIDATION_PLAN.md:1)
+- [README.md](README.md:1)
+- [docs/FEDEX_FLOW_PARITY_NOTES.md](docs/FEDEX_FLOW_PARITY_NOTES.md:1)
+- [docs/MCSL_PLATFORM_ADAPTATION_PLAN.md](docs/MCSL_PLATFORM_ADAPTATION_PLAN.md:1)
+- [docs/MCSL_CARRIER_KNOWLEDGE_RESEARCH.md](docs/MCSL_CARRIER_KNOWLEDGE_RESEARCH.md:1)
+- [docs/NEW_CARRIER_VALIDATION_PLAN.md](docs/NEW_CARRIER_VALIDATION_PLAN.md:1)
 
 ## Repo Intent
 
@@ -165,16 +165,16 @@ Do not remove them casually without checking test coverage and local `.venv` beh
 ## Docs To Keep Updated
 
 When workflow changes materially, update:
-- [README.md](/Users/madan/Documents/MCSLDomainExpert/README.md:1)
-- [CLAUDE.md](/Users/madan/Documents/MCSLDomainExpert/CLAUDE.md:1)
-- [docs/FEDEX_FLOW_PARITY_NOTES.md](/Users/madan/Documents/MCSLDomainExpert/docs/FEDEX_FLOW_PARITY_NOTES.md:1)
-- [docs/MCSL_PLATFORM_ADAPTATION_PLAN.md](/Users/madan/Documents/MCSLDomainExpert/docs/MCSL_PLATFORM_ADAPTATION_PLAN.md:1)
+- [README.md](README.md:1)
+- [CLAUDE.md](CLAUDE.md:1)
+- [docs/FEDEX_FLOW_PARITY_NOTES.md](docs/FEDEX_FLOW_PARITY_NOTES.md:1)
+- [docs/MCSL_PLATFORM_ADAPTATION_PLAN.md](docs/MCSL_PLATFORM_ADAPTATION_PLAN.md:1)
 
 When carrier reasoning changes, also update:
-- [docs/MCSL_CARRIER_KNOWLEDGE_RESEARCH.md](/Users/madan/Documents/MCSLDomainExpert/docs/MCSL_CARRIER_KNOWLEDGE_RESEARCH.md:1)
-- [docs/MCSL_CARRIER_SUPPORT_REGISTRY.md](/Users/madan/Documents/MCSLDomainExpert/docs/MCSL_CARRIER_SUPPORT_REGISTRY.md:1)
-- [docs/MCSL_CARRIER_CAPABILITY_MATRIX.md](/Users/madan/Documents/MCSLDomainExpert/docs/MCSL_CARRIER_CAPABILITY_MATRIX.md:1)
-- [docs/MCSL_CARRIER_REQUEST_REGISTRY.md](/Users/madan/Documents/MCSLDomainExpert/docs/MCSL_CARRIER_REQUEST_REGISTRY.md:1)
+- [docs/MCSL_CARRIER_KNOWLEDGE_RESEARCH.md](docs/MCSL_CARRIER_KNOWLEDGE_RESEARCH.md:1)
+- [docs/MCSL_CARRIER_SUPPORT_REGISTRY.md](docs/MCSL_CARRIER_SUPPORT_REGISTRY.md:1)
+- [docs/MCSL_CARRIER_CAPABILITY_MATRIX.md](docs/MCSL_CARRIER_CAPABILITY_MATRIX.md:1)
+- [docs/MCSL_CARRIER_REQUEST_REGISTRY.md](docs/MCSL_CARRIER_REQUEST_REGISTRY.md:1)
 
 ## Useful Commands
 
