@@ -85,31 +85,17 @@ If unclear, ask which one: Support Guide, Business Brief, or both.
 
 The Support Guide is for support/demo teams who need to understand the feature well enough to explain it to customers.
 
-It must be practical, professional, and support-friendly:
+It must be practical, professional, and support-friendly and very crisp and do not use any Technical jargon
 
-- explain what changed
+- Include the Index Page with columns "Story card Number / Title / Toggle Name / Ticket number"
+- Explain"Brief Feature Summary" in a title called "Brief Description" Keep it very crisp
 - include where support can see it inside the relevant walkthrough steps
 - explain what the merchant should experience
 - include walkthrough steps
-- include customer-safe explanation
-- include troubleshooting questions
 - include toggles/prerequisites
-- include developed by / tested by
 
 Do not write vague release notes. This should be a real support enablement document.
 
-## Business Brief Purpose
-
-The Business Brief is for non-technical stakeholders: product, sales, marketing, account managers.
-
-It must:
-
-- stay under about 400 words unless user asks otherwise
-- use plain business English
-- avoid technical terms
-- omit developed by / tested by
-- omit QA notes and test counts
-- mention toggle/availability only if the merchant or rollout team must do something
 
 ## PDF Generation
 

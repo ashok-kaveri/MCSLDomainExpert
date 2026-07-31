@@ -3,6 +3,7 @@ from __future__ import annotations
 import datetime as _dt
 import io
 import logging
+import os
 import re
 from dataclasses import dataclass, field
 
@@ -11,6 +12,14 @@ from pipeline.carrier_knowledge import detect_carrier_scope
 from pipeline.card_processor import detect_platform_scope
 
 logger = logging.getLogger(__name__)
+
+# Per-request LLM timeout (seconds). Without this a stalled socket hangs the
+# generation indefinitely. Matches the convention in card_processor.py.
+_LLM_TIMEOUT_SECONDS = int(os.environ.get("MCSL_LLM_TIMEOUT_SECONDS", "90"))
+
+# Max output tokens per doc generation. Detailed cards (multi-part walkthroughs)
+# overflow the old 2400 cap and get truncated mid-section.
+_LLM_MAX_TOKENS = int(os.environ.get("MCSL_DOC_MAX_TOKENS", "6000"))
 
 
 STANDARD_MCSL_NAVIGATION: tuple[str, ...] = (
@@ -386,7 +395,8 @@ def _invoke_doc_prompt(prompt: str, ctx: HandoffDocContext) -> str:
         model=config.CLAUDE_SONNET_MODEL,
         api_key=config.ANTHROPIC_API_KEY,
         temperature=0.1,
-        max_tokens=2400,
+        max_tokens=_LLM_MAX_TOKENS,
+        default_request_timeout=_LLM_TIMEOUT_SECONDS,
     )
     resp = claude.invoke([HumanMessage(content=prompt.format(context=_context_text(ctx)))])
     content = resp.content if isinstance(resp.content, str) else str(resp.content)
@@ -700,6 +710,13 @@ def _register_fonts() -> tuple[str, str]:
 
 def _md_to_rl(text: str, sans: str = "Arial") -> str:
     """Convert basic markdown inline formatting to ReportLab XML tags."""
+    # Markdown links [label](url) → clickable ReportLab anchors. Do this first so the
+    # label/url (which never contain markdown emphasis) survive the asterisk handling.
+    def _link(m):
+        label, url = m.group(1), m.group(2)
+        href = url.replace('&', '&amp;')
+        return f'<a href="{href}" color="#1155CC">{label}</a>'
+    text = re.sub(r'\[([^\]]+)\]\(([^)\s]+)\)', _link, text)
     text = re.sub(r'\*\*\*(.+?)\*\*\*', r'<b><i>\1</i></b>', text)
     text = re.sub(r'\*\*(.+?)\*\*',     r'<b>\1</b>', text)
     text = re.sub(r'\*(.+?)\*',         r'<i>\1</i>', text)

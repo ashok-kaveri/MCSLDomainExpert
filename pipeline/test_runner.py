@@ -114,8 +114,15 @@ def run_release_tests(
     repo_path: str,
     spec_files: list[str],
     project: str = "Google Chrome",
+    grep: str = "",
+    timeout: int = 600,
 ) -> TestRunResult:
-    """Run selected spec files via npx playwright test and return a TestRunResult.
+    """Run tests via npx playwright test and return a TestRunResult.
+
+    Args:
+        spec_files: spec paths to run (use [] when filtering by tag via `grep`).
+        grep: optional Playwright --grep value, e.g. "@smoke" to run by tag.
+        timeout: subprocess timeout in seconds.
 
     Uses PLAYWRIGHT_JSON_OUTPUT_FILE env var to capture JSON output to a temp
     file (more reliable than stdout capture when multiple reporters are configured).
@@ -138,8 +145,10 @@ def run_release_tests(
             "--reporter=json",
             "--project",
             project,
-            *spec_files,
         ]
+        if grep:
+            cmd += ["--grep", grep]
+        cmd += list(spec_files)
 
         proc = subprocess.run(
             cmd,
@@ -147,7 +156,7 @@ def run_release_tests(
             env=env,
             capture_output=True,
             text=True,
-            timeout=600,
+            timeout=timeout,
         )
 
         # Parse output

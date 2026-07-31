@@ -189,6 +189,64 @@ cd "$MCSL_REPO"  # path to your MCSLDomainExpert clone
 PYTHONPATH=. .venv/bin/streamlit run pipeline_dashboard.py
 ```
 
+## Slack QA Bot
+
+Ask QA questions from Slack and get answers in-thread. Backed by
+`pipeline/slack_qa_bot.py` (Socket Mode daemon), `pipeline/qa_question_router.py`
+(routing), and `pipeline/qa_metrics.py` (deterministic counts).
+
+The bot answers only when **explicitly addressed**, so multiple domain-expert bots
+(MCSL, FedEx, AUPost) can share a channel without all of them replying:
+- **DM** the bot — every DM is answered.
+- **@mention** the app in a channel (real Slack mention → `app_mention`, routed only
+  to this app).
+- **Trigger keyword** in an allowlisted channel (`SLACK_QA_CHANNELS`), e.g.
+  `@mcslbot how many cases ran?`. Keywords come from `SLACK_QA_TRIGGERS`
+  (default `mcslbot`); a leading `@` is optional. Un-addressed chatter is ignored.
+
+It can also **generate MCSL support guides** (PDF) from Trello:
+- `@mcslbot generate support guide for <card url/id>` → one card → PDF
+- `@mcslbot generate support guide for lane "<name>"` → one combined PDF
+- `@mcslbot generate per-card support guides for lane "<name>"` → one PDF per card
+
+Routing:
+- Metric intents → exact counts (no LLM). e.g. *"how many cases automated"* →
+  spec/`test()` counts; *"how many cases ran in the release"* → latest
+  `reports/ai-summary.json` from the automation repo.
+- Support-guide intents → Trello fetch + `handoff_docs` PDF (needs `files:write` scope + `reportlab`).
+- Everything else → RAG over **both** the wiki/KB collection and the
+  automation/code collection.
+
+> To make the real autocomplete mention read `@mcslBot`, rename the app's bot user
+> in Slack (App → **App Home** → *Edit* the display name / default username). The
+> `SLACK_QA_TRIGGERS` keyword works regardless of the app's display name.
+
+### One-time Slack app setup
+
+1. **Socket Mode** → enable → create an **App-Level Token** with `connections:write`
+   → put it in `.env` as `SLACK_APP_TOKEN=xapp-...`.
+2. **Event Subscriptions** → subscribe to bot events: `app_mention`, `message.im`,
+   and `message.groups` (private channels) / `message.channels` (public channels).
+3. **OAuth scopes**: `app_mentions:read`, `chat:write`, `im:history`, `im:read`,
+   `im:write`, and `groups:history` (for private channels) / `channels:history`
+   (for public). Reinstall the app if you add scopes. Invite the bot to the channel.
+
+### Env
+
+```bash
+SLACK_BOT_TOKEN=xoxb-...                 # already used by the rest of the app
+SLACK_APP_TOKEN=xapp-...                 # Socket Mode app-level token
+SLACK_QA_CHANNELS=qa_members_internal    # optional; comma-separated names or IDs
+SLACK_QA_TRIGGERS=mcslbot                 # optional; channel address keyword(s), default 'mcslbot'
+```
+
+### Run
+
+```bash
+scripts/run_slack_bot.sh --check    # verify tokens/config
+scripts/run_slack_bot.sh            # start the daemon (leave running)
+```
+
 ## Focused Validation Commands
 
 ```bash
@@ -197,6 +255,7 @@ pytest -q tests/test_dashboard.py::test_dash01_scaffold
 pytest -q tests/test_dashboard.py::test_ui10b_validate_ac_matches_fedex_auto_analysis_flow
 pytest -q tests/test_dashboard.py::test_ui10c_generate_tc_uses_current_ac_and_avoids_duplicate_trello_publish
 pytest -q tests/test_toggle_state.py
+pytest -q tests/test_qa_question_router.py
 ```
 
 ## Supporting Docs
