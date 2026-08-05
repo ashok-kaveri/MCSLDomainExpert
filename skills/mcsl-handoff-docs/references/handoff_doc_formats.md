@@ -15,13 +15,11 @@ The attached release package uses:
 - one combined release PDF with card-by-card sections
 - support guide label
 - release details
-- feature summary
+- index page with `Story ID`, `Story Title`, `Toggle Name`
+- brief description
 - toggles and prerequisites
-- where to find the feature
 - support/demo walkthrough
 - expected behavior
-- business-safe customer explanation
-- common questions and troubleshooting
 
 Support guide examples from the sample:
 
@@ -29,8 +27,6 @@ Support guide examples from the sample:
 - state if no toggle is required
 - specify scope such as international-only or domestic-only
 - give concrete scenarios with expected support observations
-- include merchant-facing explanation in quoted/plain language
-- include Q&A for likely support tickets
 
 ## Support Guide Tone
 
@@ -46,11 +42,9 @@ The support reader should be able to explain the feature to a merchant without a
 
 Use:
 
-- clear feature summary
+- clear brief description
 - concrete paths and steps
 - "what support should observe"
-- "what to tell the merchant"
-- "what to check if it fails"
 
 Avoid:
 
@@ -65,23 +59,30 @@ Avoid:
 # <Release> Support Guide
 
 ## Included Story Cards
-| Story / card | Carrier scope | Toggle / prerequisite signal |
+| Story ID | Story Title | Toggle Name |
 |---|---|---|
 
-## How Support Should Use This Package
-
 ## <Story ID> - <Card title>
-### Feature Summary
+### Brief Description
 ...
 ```
+
+Do not add a `How Support Should Use This Package` section. The index page is followed directly by the first card section.
+
+Index page rules:
+
+- use exactly three columns: `Story ID`, `Story Title`, `Toggle Name`
+- `Story ID` is the story/card number only
+- `Story Title` is the card title
+- `Toggle Name` is the exact toggle name, or `None` when the card needs no toggle
 
 ## Per-Card Support Guide Required Sections
 
 ```markdown
 # Support Guide: <Story ID or concise feature name>
 
-## Feature Summary
-2-4 paragraphs.
+## Brief Description
+Very crisp. 1 short paragraph.
 
 ## Toggles & Prerequisites
 State whether a feature toggle is required.
@@ -92,16 +93,9 @@ Use Scenario A/B/C when useful. Put exact navigation inside the action step, for
 
 ## Expected Behaviour
 Summarize the key signal.
-
-## Merchant-Safe Explanation
-Use customer-safe wording.
-
-## Common Questions & Troubleshooting
-Use Q/A format.
-
-## Support Escalation Packet
-Include concise fields support can send to QA/dev when the feature does not behave as expected.
 ```
+
+Do not add `Merchant-Safe Explanation`, `Common Questions & Troubleshooting`, or `Support Escalation Packet`. The card section ends after `Expected Behaviour`.
 
 ## Combined Business Brief Required Structure
 
@@ -112,7 +106,8 @@ Include concise fields support can send to QA/dev when the feature does not beha
 2-3 sentences describing the release value.
 
 ## Included Updates
-Table of cards.
+| Story ID | Story Title | Toggle Name |
+|---|---|---|
 
 ## <Story ID> - <Card title>
 Per-card plain-English business brief.
@@ -124,7 +119,7 @@ Per-card plain-English business brief.
 ## <Feature Name in Plain English>
 *One sentence headline value.*
 
-### The Problem
+### Brief Description
 2-3 sentences.
 
 ### What's New

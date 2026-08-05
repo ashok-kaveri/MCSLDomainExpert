@@ -22,13 +22,14 @@ def test_support_fallback_uses_story_card_support_format():
         doc = generate_support_guide(ctx)
 
     assert "## Support Guide: ZI-058" in doc
-    assert "## Feature Summary" in doc
+    assert "## Brief Description" in doc
     assert "## Toggles & Prerequisites" in doc
     assert "## Step-by-Step Support Walkthrough" in doc
     assert "## Expected Behaviour" in doc
-    assert "## Merchant-Safe Explanation" in doc
-    assert "## Common Questions & Troubleshooting" in doc
-    assert "## Support Escalation Packet" in doc
+    assert "## Feature Summary" not in doc
+    assert "## Merchant-Safe Explanation" not in doc
+    assert "## Common Questions & Troubleshooting" not in doc
+    assert "## Support Escalation Packet" not in doc
     assert "## The Problem" not in doc
     assert "## Test Scenarios" not in doc
 
@@ -45,7 +46,7 @@ def test_support_doc_removes_generic_mcsl_navigation_block():
     ctx = build_handoff_context(card=card, release_name="MCSL 378")
     generated = """# Support Guide: ZI-063
 
-## Feature Summary
+## Brief Description
 FedEx custom declaration statement.
 
 ## Where to Find This in MCSL
@@ -137,8 +138,6 @@ def test_support_doc_guard_removes_toggle_language_from_model_output_for_no_togg
 
 ## Step-by-Step Support Walkthrough
 1. Confirm Japan-origin DHL shipment.
-
-## Support Escalation Packet
 - Exact toggle/config value if the feature is gated.
 """
 
@@ -185,12 +184,41 @@ def test_combined_handoff_docs_include_multiple_cards():
     assert "## Included Story Cards" in support_doc
     assert "## ZI-058 - From SL: ZI-058 - eParcel bulk label generation delay" in support_doc
     assert "## ZI-059 - From SL: ZI-059 - UPS tracking sync" in support_doc
-    assert "### Feature Summary" in support_doc
+    assert "### Brief Description" in support_doc
 
     assert business_doc.startswith("# What's New: MCSL 378")
     assert "## Included Updates" in business_doc
     assert "## ZI-058 - From SL: ZI-058 - eParcel bulk label generation delay" in business_doc
     assert "## ZI-059 - From SL: ZI-059 - UPS tracking sync" in business_doc
+
+
+def test_release_index_table_uses_story_id_title_and_toggle_columns():
+    from pipeline.handoff_docs import build_handoff_context, generate_combined_support_guide
+
+    cards = [
+        types.SimpleNamespace(
+            id="c1",
+            name="ZI-058 - eParcel bulk label generation delay",
+            desc="Toggle: australiaPost.skip.get.shipment.enabled",
+            url="https://trello.com/c/example1",
+        ),
+        types.SimpleNamespace(
+            id="c2",
+            name="ZI-059 - UPS tracking sync",
+            desc="Tracking number should sync to Shopify order",
+            url="https://trello.com/c/example2",
+        ),
+    ]
+    contexts = [build_handoff_context(card=card, release_name="MCSL 378") for card in cards]
+
+    with patch("pipeline.handoff_docs._invoke_doc_prompt", side_effect=RuntimeError("offline")):
+        support_doc = generate_combined_support_guide(contexts, "MCSL 378")
+
+    assert "| Story ID | Story Title | Toggle Name |" in support_doc
+    assert "| ZI-058 | eParcel bulk label generation delay | australiaPost.skip.get.shipment.enabled |" in support_doc
+    assert "| ZI-059 | UPS tracking sync | None |" in support_doc
+    assert "Toggle / prerequisite signal" not in support_doc
+    assert "How Support Should Use This Package" not in support_doc
 
 
 def test_request_log_callout_detector_supports_all_handoff_labels():

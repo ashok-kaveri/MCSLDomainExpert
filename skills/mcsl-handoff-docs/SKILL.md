@@ -87,7 +87,7 @@ The Support Guide is for support/demo teams who need to understand the feature w
 
 It must be practical, professional, and support-friendly and very crisp and do not use any Technical jargon
 
-- Include the Index Page with columns "Story card Number / Title / Toggle Name / Ticket number"
+- Include the Index Page with exactly these columns: "Story ID", "Story Title", "Toggle Name"
 - Explain"Brief Feature Summary" in a title called "Brief Description" Keep it very crisp
 - include where support can see it inside the relevant walkthrough steps
 - explain what the merchant should experience
@@ -118,16 +118,15 @@ Combined Support Guide:
 # <Release> Support Guide
 
 ## Included Story Cards
-| Story / card | Carrier scope | Toggle / prerequisite signal |
+| Story ID | Story Title | Toggle Name |
 |---|---|---|
 
-## How Support Should Use This Package
-...
-
 ## <Story ID> - <Card title>
-### Feature Summary
+### Brief Description
 ...
 ```
+
+Do not add a `How Support Should Use This Package` section. The index page is followed directly by the first card section.
 
 Combined Business Brief:
 
@@ -138,11 +137,11 @@ Combined Business Brief:
 ...
 
 ## Included Updates
-| Story / card | Carrier scope | Toggle / prerequisite signal |
+| Story ID | Story Title | Toggle Name |
 |---|---|---|
 
 ## <Story ID> - <Card title>
-### The Problem We Solved
+### Brief Description
 ...
 ```
 
@@ -153,7 +152,7 @@ For each card section inside the combined Support Guide, follow the sample relea
 ```markdown
 # Support Guide: <Story ID or concise feature name>
 
-## Feature Summary
+## Brief Description
 ...
 
 ## Toggles & Prerequisites
@@ -164,17 +163,9 @@ For each card section inside the combined Support Guide, follow the sample relea
 
 ## Expected Behaviour
 ...
-
-## Merchant-Safe Explanation
-...
-
-## Common Questions & Troubleshooting
-**Q: ...**
-...
-
-## Support Escalation Packet
-...
 ```
+
+Do not add `Merchant-Safe Explanation`, `Common Questions & Troubleshooting`, or `Support Escalation Packet` sections. The card section ends after `Expected Behaviour`.
 
 ## Quality Bar
 

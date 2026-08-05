@@ -254,7 +254,7 @@ Use this EXACT section order — no other sections:
 
 1. `# Support Guide: <Story ID or concise feature name>`
 2. `<Original card title>` as a short subtitle line below the title when available.
-3. `## Feature Summary` — 1 concise paragraph explaining what changed, why it matters, \
+3. `## Brief Description` — 1 crisp paragraph explaining what changed, why it matters, \
    and the affected carrier/product area. Keep it support-facing, not marketing-heavy.
 4. `## Toggles & Prerequisites` — markdown table with columns \
    `| Toggle / config note | What support should confirm |`. \
@@ -276,22 +276,16 @@ Use this EXACT section order — no other sections:
    `| What support should observe | How to confirm |`. \
    Include UI result, request/log result, document/report result, or sync result when supported by context.
    Include exact request/log node names when the card or QA evidence requires payload verification.
-7. `## Merchant-Safe Explanation` — 1 short paragraph translating the change into merchant-friendly language. \
-   Do not expose internal implementation details unless the merchant must know a toggle/config name.
-8. `## Common Questions & Troubleshooting` — bullets. Include what to check first, when to inspect logs, \
-   and when to escalate. Do not invent limitations.
-9. `## Support Escalation Packet` — bullets containing:
-   - Story card and Trello URL
-   - Store URL, account UUID, carrier account, order number, and generated label/tracking/report identifier
-   - Screenshots of setup page and request/log evidence when carrier behavior is involved
-   - Exact toggle/config value if gated
+
+The document ends after `Expected Behaviour`.
 
 Formatting rules:
 - Use markdown tables with pipe syntax — header row, separator row (|---|---|), then data rows.
 - Never use giant paragraphs — prefer bullets, numbered lists, and tables.
 - Mention MCSL navigation paths naturally: ORDERS tab, hamburger menu > Products, hamburger menu > Carriers, etc.
 - Call out carrier names explicitly when the feature is carrier-specific.
-- DO NOT add: The Problem, The Solution, Key Benefits, User Story, Test Scenarios, Acceptance Criteria Checklist, \
+- DO NOT add: Merchant-Safe Explanation, Common Questions & Troubleshooting, Support Escalation Packet, \
+  The Problem, The Solution, Key Benefits, User Story, Test Scenarios, Acceptance Criteria Checklist, \
   AI Code Analysis, Rollout Notes, or References.
 - Use facts from the context only. If a detail is missing, phrase it as "Confirm from live store/card context" rather than inventing.
 
@@ -311,7 +305,7 @@ Tone: Friendly, benefit-first, real-world focused. No jargon, no API field names
 
 Use this exact section order:
 1. `# What's New: <feature name in plain English>`
-2. `## The Problem We Solved`
+2. `## Brief Description`
 3. `## What You Can Do Now`
 4. `## Real-World Scenarios`
 5. `## Who Benefits`
@@ -319,7 +313,7 @@ Use this exact section order:
 7. `## What Stays the Same`
 
 Section guidelines:
-- **The Problem We Solved**: Tell the story from a merchant's perspective. What frustration or blocker did they hit? \
+- **Brief Description**: Tell the story from a merchant's perspective. What frustration or blocker did they hit? \
   Use a realistic merchant scenario (e.g. "If your warehouse uses thermal label printers..."). 2-4 sentences max.
 - **What You Can Do Now**: Plain-English bullets describing the new capability. No technical terms. \
   Translate any label format names (e.g. STOCK_4X6 → "4×6 inch thermal label") into human-readable equivalents.
@@ -420,7 +414,7 @@ def _enforce_standard_navigation(markdown_text: str, ctx: HandoffDocContext) -> 
         return markdown_text
 
     pattern = re.compile(
-        r"(## Where to Find This in MCSL\s*\n)(.*?)(?=\n## (?:Step-by-Step Support Walkthrough|Expected Behaviour|Merchant-Safe Explanation|Common Questions & Troubleshooting|Support Escalation Packet)\b)",
+        r"(## Where to Find This in MCSL\s*\n)(.*?)(?=\n## (?:Step-by-Step Support Walkthrough|Expected Behaviour)\b|\Z)",
         flags=re.DOTALL,
     )
     sanitized, count = pattern.subn("", markdown_text, count=1)
@@ -467,26 +461,19 @@ def _fallback_support_doc(ctx: HandoffDocContext) -> str:
     carriers = ", ".join(ctx.carrier_names) if ctx.carrier_names else "carrier-neutral"
     platform_scope = ", ".join(ctx.platform_names) if ctx.platform_names else "Shopify"
     nav_steps = ctx.likely_navigation or ["MCSL embedded app main flow"]
-    story_id_match = re.search(r"\b([A-Z]{1,4}-\d{1,5})\b", ctx.card_name or "")
-    story_label = story_id_match.group(1) if story_id_match else ctx.card_name
+    story_label = _story_id(ctx) or ctx.card_name
     if ctx.toggle_names:
         toggle_rows = "\n".join(
             f"| {toggle} | Confirm the exact value is enabled for the target store/account before testing. |"
             for toggle in ctx.toggle_names
         )
-        toggle_troubleshooting = "- If the behavior is not visible, first confirm release, store/account, carrier account, and toggle/config state."
-        toggle_escalation = "\n- Exact toggle/config value."
     else:
         toggle_rows = "| No toggle | No feature toggle is required for this card; validate release deployment, carrier/account setup, and card-specific prerequisites only. |"
-        toggle_troubleshooting = "- If the behavior is not visible, first confirm release, store/account, carrier account, and card-specific prerequisites."
-        toggle_escalation = ""
-    return f"""# {ctx.card_name}
-
-## Support Guide: {story_label}
+    return f"""## Support Guide: {story_label}
 
 {ctx.card_name}
 
-## Feature Summary
+## Brief Description
 This update covers the approved card scope for {carriers} behaviour in MCSL. Support should verify it on the customer/test platform from the card: {platform_scope}. Use the card details, approved AC, test evidence, and live store state to explain or verify the visible merchant outcome.
 
 ## Toggles & Prerequisites
@@ -504,7 +491,6 @@ This update covers the approved card scope for {carriers} behaviour in MCSL. Sup
 2. Open the relevant MCSL area: {nav_steps[0]}.
 3. Reproduce the workflow described in the approved card scope.
 4. Check the visible UI result and any request/log, document, tracking, sync, or report evidence.
-5. Capture the escalation details below if the expected behaviour is not observed.
 
 ## Expected Behaviour
 
@@ -512,25 +498,6 @@ This update covers the approved card scope for {carriers} behaviour in MCSL. Sup
 |---|---|
 | The feature behaves as described in the approved card scope. | Compare the live UI result with the approved AC and AI QA evidence. |
 | Existing related MCSL workflows continue to work. | Run the adjacent order/product/carrier flow noted in the card context. |
-
-## Merchant-Safe Explanation
-
-You can explain this as an MCSL release improvement for the affected carrier or product workflow. The merchant should not need internal implementation details; translate the change into the visible setup or result described above.
-
-## Common Questions & Troubleshooting
-
-{toggle_troubleshooting}
-- If carrier behavior is involved, inspect the request and response logs before escalating.
-- If sync behavior is involved, compare MCSL with the detected platform's Orders or Products source data.
-- If only one order/product fails, capture that exact record before treating it as a release-wide issue.
-
-## Support Escalation Packet
-
-- Story card: {story_label} - {ctx.card_name}
-- Trello URL: {ctx.card_url or 'Confirm from card context'}
-- Store URL, account UUID, carrier account, order number, and generated label/tracking/report identifier.
-- Screenshots of the setup page and request/log evidence whenever carrier behavior is involved.
-{toggle_escalation}
 """
 
 
@@ -539,7 +506,7 @@ def _fallback_business_doc(ctx: HandoffDocContext) -> str:
     platform_merchants = ", ".join(ctx.platform_names) + " merchants" if ctx.platform_names else "MCSL merchants"
     return f"""# What's New: {ctx.card_name}
 
-## The Problem We Solved
+## Brief Description
 {platform_merchants} using {carriers} through the MCSL app previously encountered a limitation in this area. \
 This update removes that blocker so your store can ship more smoothly without workarounds.
 
@@ -614,17 +581,49 @@ def _demote_markdown(markdown_text: str) -> str:
     return "\n".join(lines).strip()
 
 
+def _story_id(ctx: HandoffDocContext) -> str:
+    """Story/card number only, for the index page `Story ID` column."""
+    name = ctx.card_name or ""
+    story_id_match = re.search(r"\b([A-Z]{1,4}-\d{1,5})\b", name)
+    if story_id_match:
+        return story_id_match.group(1)
+    leading_number = re.match(r"\s*#?(\d{1,6})\b", name)
+    if leading_number:
+        return leading_number.group(1)
+    return ""
+
+
+def _story_title(ctx: HandoffDocContext) -> str:
+    """Card title with any leading story id stripped, for the `Story Title` column."""
+    title = (ctx.card_name or "").strip()
+    story_id = _story_id(ctx)
+    if story_id and title.startswith(story_id):
+        title = title[len(story_id):].lstrip(" -–—:#")
+    return title or "(untitled card)"
+
+
+def _table_cell(value: str) -> str:
+    return (value or "").replace("|", "\\|").replace("\n", " ").strip()
+
+
 def _release_summary_table(contexts: list[HandoffDocContext]) -> str:
     rows = [
-        "| Story / card | Platform | Carrier scope | Toggle / prerequisite signal |",
-        "|---|---|---|---|",
+        "| Story ID | Story Title | Toggle Name |",
+        "|---|---|---|",
     ]
     for ctx in contexts:
-        platforms = ", ".join(ctx.platform_names) if ctx.platform_names else "Shopify"
-        carriers = ", ".join(ctx.carrier_names) if ctx.carrier_names else "Carrier-neutral"
-        toggles = ", ".join(ctx.toggle_names) if ctx.toggle_names else "None detected"
-        rows.append(f"| {_doc_title(ctx)} | {platforms} | {carriers} | {toggles} |")
+        toggles = ", ".join(ctx.toggle_names) if ctx.toggle_names else "None"
+        rows.append(
+            f"| {_table_cell(_story_id(ctx)) or '-'} | {_table_cell(_story_title(ctx))} | {_table_cell(toggles)} |"
+        )
     return "\n".join(rows)
+
+
+def _card_section_heading(ctx: HandoffDocContext) -> str:
+    """`<Story ID> - <Story Title>` heading, without repeating the id inside the title."""
+    story_id = _story_id(ctx)
+    story_title = _story_title(ctx)
+    return f"{story_id} - {story_title}" if story_id else story_title
 
 
 def generate_combined_support_guide(contexts: list[HandoffDocContext], release_name: str = "") -> str:
@@ -636,16 +635,11 @@ def generate_combined_support_guide(contexts: list[HandoffDocContext], release_n
         "",
         "## Included Story Cards",
         _release_summary_table(contexts),
-        "",
-        "## How Support Should Use This Package",
-    "- Use each card section as the support/demo guide for that feature.",
-        "- Confirm customer/test platform, live store, carrier account, order/product, and toggle state before promising behavior.",
-        "- Capture the escalation packet listed in the relevant card section if behavior does not match.",
     ]
     for ctx in contexts:
         parts.extend([
             "",
-            f"## {_doc_title(ctx)} - {ctx.card_name}",
+            f"## {_card_section_heading(ctx)}",
             _demote_markdown(generate_support_guide(ctx)),
         ])
     return "\n".join(part for part in parts if part is not None).strip()
@@ -671,7 +665,7 @@ def generate_combined_business_brief(contexts: list[HandoffDocContext], release_
     for ctx in contexts:
         parts.extend([
             "",
-            f"## {_doc_title(ctx)} - {ctx.card_name}",
+            f"## {_card_section_heading(ctx)}",
             _demote_markdown(generate_business_brief(ctx)),
         ])
     parts.extend([
