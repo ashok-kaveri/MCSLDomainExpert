@@ -79,8 +79,8 @@ Prior to this fix, the MCSL WooCommerce plugin sent `status=publish` as a hardco
 |---|---|
 | No toggle | Fix is code-level; no setting to enable |
 | WooCommerce only | This is not a Shopify issue — confirm merchant is on WooCommerce |
-| Third-party role plugin required | Merchant must have a role-restriction plugin active (e.g., User Role Editor) to reproduce the affected product type |
-| Manual import path affected | Auto-import/webhook worked before the fix; only manual bulk import and single-product import were broken |
+| Install third-party plugins | **Product Visibility by User Role for WooCommerce** — configures product visibility rules by user role. **User Role Editor** — creates custom user roles (e.g. Wholesale) needed to reproduce the affected product type |
+| Manual import only | This issue applies only to manual product import. Before testing, disable auto product import via webhooks and test via manual import |
 
 ### Step-by-Step Support Walkthrough
 
