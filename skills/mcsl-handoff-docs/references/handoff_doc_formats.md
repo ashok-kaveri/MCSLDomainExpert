@@ -59,8 +59,8 @@ Avoid:
 # <Release> Support Guide
 
 ## Included Story Cards
-| Story ID | Story Title | Toggle Name |
-|---|---|---|
+| Story ID | Story Title | Toggle Name | Trello card link |
+|---|---|---|---|
 
 ## <Story ID> - <Card title>
 ### Brief Description
@@ -71,10 +71,11 @@ Do not add a `How Support Should Use This Package` section. The index page is fo
 
 Index page rules:
 
-- use exactly three columns: `Story ID`, `Story Title`, `Toggle Name`
+- use exactly four columns: `Story ID`, `Story Title`, `Toggle Name`, `Trello card link`
 - `Story ID` is the story/card number only
 - `Story Title` is the card title
 - `Toggle Name` is the exact toggle name, or `None` when the card needs no toggle
+- `Trello card link` is a markdown link to the card, labelled with the story id, for example `[941](https://trello.com/c/abc123)`; use `-` when no card URL is known
 
 ## Per-Card Support Guide Required Sections
 
@@ -106,8 +107,8 @@ Do not add `Merchant-Safe Explanation`, `Common Questions & Troubleshooting`, or
 2-3 sentences describing the release value.
 
 ## Included Updates
-| Story ID | Story Title | Toggle Name |
-|---|---|---|
+| Story ID | Story Title | Toggle Name | Trello card link |
+|---|---|---|---|
 
 ## <Story ID> - <Card title>
 Per-card plain-English business brief.

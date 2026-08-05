@@ -87,7 +87,7 @@ The Support Guide is for support/demo teams who need to understand the feature w
 
 It must be practical, professional, and support-friendly and very crisp and do not use any Technical jargon
 
-- Include the Index Page with exactly these columns: "Story ID", "Story Title", "Toggle Name"
+- Include the Index Page with exactly these columns: "Story ID", "Story Title", "Toggle Name", "Trello card link"
 - Explain"Brief Feature Summary" in a title called "Brief Description" Keep it very crisp
 - include where support can see it inside the relevant walkthrough steps
 - explain what the merchant should experience
@@ -118,8 +118,8 @@ Combined Support Guide:
 # <Release> Support Guide
 
 ## Included Story Cards
-| Story ID | Story Title | Toggle Name |
-|---|---|---|
+| Story ID | Story Title | Toggle Name | Trello card link |
+|---|---|---|---|
 
 ## <Story ID> - <Card title>
 ### Brief Description
@@ -137,8 +137,8 @@ Combined Business Brief:
 ...
 
 ## Included Updates
-| Story ID | Story Title | Toggle Name |
-|---|---|---|
+| Story ID | Story Title | Toggle Name | Trello card link |
+|---|---|---|---|
 
 ## <Story ID> - <Card title>
 ### Brief Description

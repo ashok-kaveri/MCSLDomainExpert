@@ -214,9 +214,12 @@ def test_release_index_table_uses_story_id_title_and_toggle_columns():
     with patch("pipeline.handoff_docs._invoke_doc_prompt", side_effect=RuntimeError("offline")):
         support_doc = generate_combined_support_guide(contexts, "MCSL 378")
 
-    assert "| Story ID | Story Title | Toggle Name |" in support_doc
-    assert "| ZI-058 | eParcel bulk label generation delay | australiaPost.skip.get.shipment.enabled |" in support_doc
-    assert "| ZI-059 | UPS tracking sync | None |" in support_doc
+    assert "| Story ID | Story Title | Toggle Name | Trello card link |" in support_doc
+    assert (
+        "| ZI-058 | eParcel bulk label generation delay "
+        "| australiaPost.skip.get.shipment.enabled | [ZI-058](https://trello.com/c/example1) |"
+    ) in support_doc
+    assert "| ZI-059 | UPS tracking sync | None | [ZI-059](https://trello.com/c/example2) |" in support_doc
     assert "Toggle / prerequisite signal" not in support_doc
     assert "How Support Should Use This Package" not in support_doc
 

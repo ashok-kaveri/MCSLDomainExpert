@@ -606,15 +606,25 @@ def _table_cell(value: str) -> str:
     return (value or "").replace("|", "\\|").replace("\n", " ").strip()
 
 
+def _trello_link_cell(ctx: HandoffDocContext) -> str:
+    """Markdown link for the index page `Trello card link` column."""
+    url = (ctx.card_url or "").strip()
+    if not url:
+        return "-"
+    label = _story_id(ctx) or "Card"
+    return f"[{label}]({url})"
+
+
 def _release_summary_table(contexts: list[HandoffDocContext]) -> str:
     rows = [
-        "| Story ID | Story Title | Toggle Name |",
-        "|---|---|---|",
+        "| Story ID | Story Title | Toggle Name | Trello card link |",
+        "|---|---|---|---|",
     ]
     for ctx in contexts:
         toggles = ", ".join(ctx.toggle_names) if ctx.toggle_names else "None"
         rows.append(
-            f"| {_table_cell(_story_id(ctx)) or '-'} | {_table_cell(_story_title(ctx))} | {_table_cell(toggles)} |"
+            f"| {_table_cell(_story_id(ctx)) or '-'} | {_table_cell(_story_title(ctx))} "
+            f"| {_table_cell(toggles)} | {_trello_link_cell(ctx)} |"
         )
     return "\n".join(rows)
 
@@ -1003,7 +1013,11 @@ def render_pdf_bytes(title: str, markdown_text: str) -> bytes:
         # Normalise column count
         parsed = [r + [""] * (n_cols - len(r)) for r in parsed]
         # Auto column widths: first col narrower, last col narrower for status cols
-        if n_cols == 3:
+        header_cells = [c.lower() for c in parsed[0]]
+        if n_cols == 4 and "story id" in header_cells[0]:
+            # Release index page: Story ID | Story Title | Toggle Name | Trello card link
+            col_ws = [0.09 * CW, 0.43 * CW, 0.29 * CW, 0.19 * CW]
+        elif n_cols == 3:
             col_ws = [0.06 * CW, 0.56 * CW, 0.38 * CW]
         elif n_cols == 2:
             col_ws = [0.32 * CW, 0.68 * CW]
