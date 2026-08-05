@@ -180,16 +180,19 @@ def test_combined_handoff_docs_include_multiple_cards():
         support_doc = generate_combined_support_guide(contexts, "MCSL 378")
         business_doc = generate_combined_business_brief(contexts, "MCSL 378")
 
+    # "From SL:" boilerplate is stripped from card headings and the index page.
     assert support_doc.startswith("# MCSL 378 Support Guide")
     assert "## Included Story Cards" in support_doc
-    assert "## ZI-058 - From SL: ZI-058 - eParcel bulk label generation delay" in support_doc
-    assert "## ZI-059 - From SL: ZI-059 - UPS tracking sync" in support_doc
+    assert "## ZI-058 - eParcel bulk label generation delay" in support_doc
+    assert "## ZI-059 - UPS tracking sync" in support_doc
     assert "### Brief Description" in support_doc
+    index_rows = [ln for ln in support_doc.splitlines() if ln.startswith("| ZI-")]
+    assert index_rows and not any("From SL:" in row for row in index_rows)
 
     assert business_doc.startswith("# What's New: MCSL 378")
     assert "## Included Updates" in business_doc
-    assert "## ZI-058 - From SL: ZI-058 - eParcel bulk label generation delay" in business_doc
-    assert "## ZI-059 - From SL: ZI-059 - UPS tracking sync" in business_doc
+    assert "## ZI-058 - eParcel bulk label generation delay" in business_doc
+    assert "## ZI-059 - UPS tracking sync" in business_doc
 
 
 def test_release_index_table_uses_story_id_title_and_toggle_columns():
@@ -265,3 +268,125 @@ def test_handoff_context_uses_named_platform_or_shopify_default():
     bigcommerce_ctx = build_handoff_context(card=bigcommerce_card, release_name="MCSL 378")
     assert bigcommerce_ctx.platform_names == ["BigCommerce"]
     assert any("BigCommerce" in item for item in bigcommerce_ctx.likely_navigation)
+
+
+def test_md_to_rl_keeps_code_spans_out_of_emphasis_matching():
+    """A literal * inside a code span must not pair as italic across spans.
+
+    Real MCSL 384 content ("`*.disabled` ... `*.enabled`") produced interleaved
+    <font>/<i> tags that ReportLab refused to parse.
+    """
+    from pipeline.handoff_docs import _md_to_rl
+
+    out = _md_to_rl("Kill-switch (`*.disabled`) suppresses reactivation even when `*.enabled` is true")
+
+    assert "<i>" not in out
+    assert out.count('<font name="Courier" fontSize="9">') == 2
+    assert out.count("</font>") == 2
+    assert ".disabled" in out and ".enabled" in out
+
+
+def test_md_to_rl_still_renders_bold_italic_and_links():
+    from pipeline.handoff_docs import _md_to_rl
+
+    out = _md_to_rl("**bold** and *italic* and `code` and [card](https://trello.com/c/x)")
+
+    assert "<b>bold</b>" in out
+    assert "<i>italic</i>" in out
+    assert '<font name="Courier" fontSize="9">code</font>' in out
+    assert '<a href="https://trello.com/c/x" color="#1155CC">card</a>' in out
+
+
+def test_detect_toggles_handles_markdown_wrapped_keys():
+    """Real MCSL 384 card text: bold splits keys and sits between colon and value."""
+    from pipeline.handoff_docs import detect_toggles
+
+    # ZI-657 — bold between the colon and the value
+    assert detect_toggles('**"{accountUUID}.products.bulk.edit.grid.enabled":** **true,**') == [
+        "{accountUUID}.products.bulk.edit.grid.enabled"
+    ]
+    # ZI-651 — bare bolded key on its own line
+    assert detect_toggles("**{accountUUID}.wc.cancelled.order.reactivation.enabled**") == [
+        "{accountUUID}.wc.cancelled.order.reactivation.enabled"
+    ]
+    # ZI-664 — bold splitting the key, and prose form
+    assert detect_toggles("{accountUUID}.**amazon.referred**") == ["{accountUUID}.amazon.referred"]
+    assert detect_toggles("Given the toggle `{accountUUID}.amazon.referred` is ON") == [
+        "{accountUUID}.amazon.referred"
+    ]
+
+
+def test_detect_toggles_ignores_filenames_and_domains():
+    from pipeline.handoff_docs import detect_toggles
+
+    assert detect_toggles("Affected Files: serviceCodes.js, canpar/constants.js, feature toggle config") == []
+    assert detect_toggles("See https://trello.com and pluginhive.com for the toggle docs") == []
+
+
+def test_request_callout_variants_are_normalized_for_the_pdf_highlighter():
+    """Models emit the label with backticks or a doubled dash; both must still highlight."""
+    from pipeline.handoff_docs import _normalize_request_callouts, is_request_log_callout
+
+    raw = "\n".join([
+        "   - `- Request nodes to verify:` dimension fields in the product update payload",
+        "- `Request node to verify:` declarationStatement",
+        "- Request/log fields to verify: carrier not found",
+        "* Request/response nodes to verify: VAT component",
+    ])
+    out = _normalize_request_callouts(raw).splitlines()
+
+    assert all(is_request_log_callout(line) for line in out), out
+    assert out[0] == "- Request nodes to verify: dimension fields in the product update payload"
+    assert out[1] == "- Request node to verify: declarationStatement"
+    assert "`" not in "\n".join(out)
+
+
+def test_normalizer_leaves_ordinary_bullets_alone():
+    from pipeline.handoff_docs import _normalize_request_callouts
+
+    text = "- Open the request log and compare the result.\n- Confirm the toggle is on."
+    assert _normalize_request_callouts(text) == text
+
+
+def test_callout_normalizer_clears_unbalanced_backticks_it_creates():
+    from pipeline.handoff_docs import _normalize_request_callouts, is_request_log_callout
+
+    raw = "- `Request/log fields to verify: _composite_parent`, `_composite_children` meta keys"
+    out = _normalize_request_callouts(raw)
+
+    assert is_request_log_callout(out)
+    assert "`" not in out
+    assert "_composite_parent" in out and "_composite_children" in out
+
+
+def test_each_card_section_starts_on_a_new_pdf_page():
+    """A card must never begin part-way down the previous card's page."""
+    from pipeline.handoff_docs import is_card_section_heading, render_pdf_bytes
+
+    assert is_card_section_heading("ZI-651 - WSS order updates not syncing")
+    assert is_card_section_heading("941 - Add DAP Incoterm option")
+    assert not is_card_section_heading("Included Story Cards")
+    assert not is_card_section_heading("Toggles & Prerequisites")
+
+    doc = "\n".join([
+        "# MCSL 384 Support Guide",
+        "",
+        "## Included Story Cards",
+        "| Story ID | Story Title | Toggle Name | Trello card link |",
+        "|---|---|---|---|",
+        "| ZI-001 | First card | None | - |",
+        "",
+        "## ZI-001 - First card",
+        "### Brief Description",
+        "Short body.",
+        "",
+        "## ZI-002 - Second card",
+        "### Brief Description",
+        "Short body.",
+    ])
+    pdf = render_pdf_bytes("MCSL 384 Support Guide", doc)
+
+    # Index page + one page per card, even though the bodies are tiny:
+    # header/index page, ZI-001 page, ZI-002 page.
+    pages = pdf.count(b"/Type /Page") - pdf.count(b"/Type /Pages")
+    assert pages == 3, pages

@@ -110,24 +110,33 @@ For one requested release document, create one combined PDF containing all selec
 
 For both, create two combined PDFs: one Support Guide package and one Business Brief package.
 
-## Slack Delivery (approval required)
+## Slack Delivery
 
-After rendering a PDF, always offer to send it to Slack. Never send without explicit approval in the current turn.
+Send with `scripts/send_handoff_pdf_to_slack.py`. Nothing is sent without `--yes`, so always dry-run first and show the resolved target.
 
-1. Report the PDF path, then run the dry run so the user sees the exact target:
+```bash
+# dry run — prints target, filename, size, message text
+python3 scripts/send_handoff_pdf_to_slack.py --pdf <pdf path> --title "<doc title>"
 
-   ```bash
-   python3 scripts/send_handoff_pdf_to_slack.py --pdf <pdf path> --title "<doc title>"
-   ```
+# DM to the doc owner (default target)
+python3 scripts/send_handoff_pdf_to_slack.py --pdf <pdf path> --title "<doc title>" --yes
 
-   Without `--yes` nothing is sent — it prints target, filename, size, and the message text.
+# team channel: bare --channel targets qa_members_internal
+python3 scripts/send_handoff_pdf_to_slack.py --pdf <pdf path> --title "<doc title>" --channel --yes
+```
 
-2. Ask the user to approve that target. Default target is a Slack DM to the doc owner, so the PDF can be checked before it reaches the team.
-3. Only after the user answers yes, re-run the same command with `--yes` appended.
-4. To send to the team instead, add `--channel` — with no value it targets `qa_members_internal`, the default release destination. Name another channel explicitly when asked, for example `--channel qa-team`. Treat a channel send as a separate approval — approval for a DM is not approval for a channel.
-5. Report the result: target, file id on success, or the exact Slack error on failure.
+**When the request already names a destination, that is the approval — do not ask again.**
+"DM me the PDF", "send it to me", "share it in #qa-team" all authorise that one send: dry-run,
+then send in the same turn, then report the target and file id. Re-sending a corrected version
+of a document the user already asked to be sent needs no fresh approval either.
 
-Do not batch this. One approval covers one send to one target.
+Ask first only when:
+
+- the user asked for a document but named no destination, or
+- the send target differs from the one they named — in particular, approval for a DM is never
+  approval for a team channel, and vice versa.
+
+Always report the outcome: target, file id on success, or the exact Slack error on failure.
 
 ## Combined Release Package Structure
 
@@ -198,6 +207,7 @@ Before finalizing:
 - verify every live Trello QA comment and checklist has been considered before finalizing a release package
 - do not add a generic `Where to Find This in MCSL` section; include exact platform-aware navigation in the relevant walkthrough step instead
 - include highlighted exact request/log node names when the card requires request-payload, response, or diagnostic-log verification, such as `discount`, `declarationStatement`, `signature`, `classification_type`, or carrier-specific service fields
+- every story card starts on a new page, including the first — the index page stands alone and the renderer inserts the breaks, so never hand-place one
 - verify no card heading starts at the bottom of a page without its detail table/content following on the same page
 - keep the support guide thorough enough for a support call
 - keep the business brief short and polished

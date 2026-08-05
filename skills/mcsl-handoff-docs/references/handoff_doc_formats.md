@@ -150,6 +150,7 @@ Rules:
 - Run a platform audit for every card. Detect Shopify, WooCommerce, BigCommerce, Magento, or PrestaShop from the card/ticket evidence. If no platform is explicit, default to Shopify. If a customer/ticket names a non-Shopify platform, use that platform in support steps and business wording while treating the feature as shared MCSL behavior unless the card limits scope.
 - Do not include a generic `Where to Find This in MCSL` section. The detailed walkthrough is the source of truth for where support should go.
 - Keep feature-specific paths and carrier-specific steps inside the walkthrough/troubleshooting sections.
+- Every story card section starts on a new PDF page, including the first — the index page stands alone. `render_pdf_bytes` inserts a page break before each `<Story ID> - <Title>` heading, so do not add manual page breaks or blank filler.
 - Before final PDF generation, verify no card starts at the bottom of a page without the card detail table/content following on the same page.
 - Run a card-by-card payload/log audit before final PDF generation:
   - If QA/support must inspect a carrier request, response, payload, request log, invoice request, tracking payload, report source field, or automation-rule log, include the exact node or log field.

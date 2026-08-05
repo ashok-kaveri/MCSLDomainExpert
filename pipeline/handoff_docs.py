@@ -63,6 +63,16 @@ def is_request_log_callout(markdown_line: str) -> bool:
     return bool(REQUEST_LOG_CALLOUT_RE.match((markdown_line or "").strip()))
 
 
+# An H2 that opens a card section in a combined release package:
+# "ZI-651 - WSS order updates not syncing" or "941 - Add DAP Incoterm option".
+CARD_SECTION_HEADING_RE = re.compile(r"^(?:[A-Z]{1,4}-\d{1,5}|\d{1,6})\s+-\s+\S")
+
+
+def is_card_section_heading(heading_text: str) -> bool:
+    """Return true when a heading starts a new story-card section."""
+    return bool(CARD_SECTION_HEADING_RE.match((heading_text or "").strip()))
+
+
 @dataclass
 class HandoffDocContext:
     card_id: str
@@ -108,19 +118,46 @@ def split_card_members(members: list[dict]) -> tuple[list[str], list[str]]:
     return developers, testers
 
 
+# A toggle key: dotted segments, allowing the {accountUUID} placeholder cards use.
+_TOGGLE_NAME = r"[A-Za-z0-9_{}-]+(?:\.[A-Za-z0-9_{}-]+)+"
+
+# Dotted strings that look like toggles but are filenames, domains, or versions.
+_NOT_A_TOGGLE_SUFFIX = (
+    "js", "jsx", "ts", "tsx", "py", "md", "json", "yml", "yaml", "sql", "xml", "csv", "sh",
+    "html", "css", "scss", "php", "mov", "mp4", "png", "jpg", "jpeg", "gif", "pdf", "zip",
+    "com", "io", "org", "net", "dev", "log", "txt",
+)
+
+
 def detect_toggles(*texts: str) -> list[str]:
+    """Pull feature-toggle keys out of card text.
+
+    Card authors wrap keys in markdown ("**{accountUUID}.x.y.enabled**" or
+    "{accountUUID}.**amazon.referred**") and put bold between the colon and the
+    value, so emphasis characters are stripped before matching.
+    """
     patterns = [
-        r"[`\"“”']?([A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)+)[`\"“”']?\s*:\s*(?:true|false)",
-        r"\btoggle\b\s*[:=-]\s*([A-Za-z0-9_. -]+)",
-        r"\bfeature flag\b\s*[:=-]\s*([A-Za-z0-9_. -]+)",
-        r"\brollout\b\s*[:=-]\s*([A-Za-z0-9_. -]+)",
+        # "{accountUUID}.x.y.enabled": true
+        rf"[`\"“”']?({_TOGGLE_NAME})[`\"“”']?\s*:\s*(?:true|false)",
+        # the toggle {accountUUID}.amazon.referred is ON
+        rf"\btoggles?\b[^\n]{{0,40}}?({_TOGGLE_NAME})",
+        rf"\bfeature flag\b[^\n]{{0,40}}?({_TOGGLE_NAME})",
+        # a bare key on its own line, as cards often list it
+        rf"^\s*({_TOGGLE_NAME}\.(?:enabled|disabled))\s*,?\s*$",
+        # a bare {placeholder}-prefixed key on its own line, e.g. {accountUUID}.amazon.referred
+        r"^\s*(\{[A-Za-z0-9_]+\}\.[A-Za-z0-9_{}-]+(?:\.[A-Za-z0-9_{}-]+)*)\s*,?\s*$",
+        rf"\brollout\b\s*[:=-]\s*({_TOGGLE_NAME})",
     ]
     found: list[str] = []
     for text in texts:
+        # Drop markdown emphasis so bold inside or around a key does not split it.
+        clean = re.sub(r"[*`_]{1,3}", "", text or "")
         for pattern in patterns:
-            for match in re.findall(pattern, text or "", flags=re.IGNORECASE):
-                value = re.sub(r"\s+", " ", match).strip(" -:")
-                if value and value not in found:
+            for match in re.findall(pattern, clean, flags=re.IGNORECASE | re.MULTILINE):
+                value = re.sub(r"\s+", " ", match).strip(" -:,")
+                if not value or value.rsplit(".", 1)[-1].lower() in _NOT_A_TOGGLE_SUFFIX:
+                    continue
+                if value not in found:
                     found.append(value)
     return found
 
@@ -254,13 +291,15 @@ Use this EXACT section order — no other sections:
 
 1. `# Support Guide: <Story ID or concise feature name>`
 2. `<Original card title>` as a short subtitle line below the title when available.
-3. `## Brief Description` — 1 crisp paragraph explaining what changed, why it matters, \
-   and the affected carrier/product area. Keep it support-facing, not marketing-heavy.
+3. `## Brief Description` — 2-4 sentences, one paragraph, explaining what changed, why it matters, \
+   and the affected carrier/product area. Keep it support-facing, not marketing-heavy. No preamble.
 4. `## Toggles & Prerequisites` — markdown table with columns \
    `| Toggle / config note | What support should confirm |`. \
-   Include detected toggles, release/store prerequisites, carrier account/service prerequisites, \
-   detected customer/test platform, and "None detected" only if nothing is known.
+   At most 4 rows. Include detected toggles, release/store prerequisite, and the carrier/account or \
+   platform prerequisite only when it actually matters for this card. Use "No toggle" when none is known.
 5. `## Step-by-Step Support Walkthrough` — numbered support steps to verify or explain the feature. \
+   At most 8 numbered steps in total across all scenarios. Use at most 2 scenarios, and only when the \
+   second one covers genuinely different behaviour. One line per step — no sub-bullets restating the step. \
    Include the exact app area/path inside the relevant step, such as ORDERS, hamburger menu > Carriers, \
    hamburger menu > Products, Reports, Shopify Admin Orders/Products, WooCommerce Orders/Products, \
    BigCommerce Orders/Products/checkout/rate automation, Magento Orders/Products, PrestaShop Orders/Products, \
@@ -269,21 +308,37 @@ Use this EXACT section order — no other sections:
    BigCommerce, Magento, or PrestaShop is detected; if the implementation is shared, say support is validating it on the reported platform. \
    Do not add a separate generic `Where to Find This in MCSL` section.
    If the card requires payload, carrier request, response, or diagnostic log verification, add a highlighted \
-   bullet immediately after the relevant step using one of these exact labels: \
-   `- Request node to verify: ...`, `- Request nodes to verify: ...`, \
-   `- Request/response nodes to verify: ...`, or `- Request/log fields to verify: ...`.
+   bullet immediately after the relevant step. The bullet must start with a plain dash and one of these \
+   label texts, with no backticks or extra dash around the label: \
+   Request node to verify:  /  Request nodes to verify:  /  Request/response nodes to verify:  /  \
+   Request/log fields to verify:  \
+   For example, exactly: - Request nodes to verify: discount, declarationStatement
 6. `## Expected Behaviour` — markdown table with columns \
    `| What support should observe | How to confirm |`. \
-   Include UI result, request/log result, document/report result, or sync result when supported by context.
+   At most 4 rows, each a distinct signal — UI result, request/log result, document/report result, \
+   or sync result. Do not repeat the walkthrough steps here.
    Include exact request/log node names when the card or QA evidence requires payload verification.
 
 The document ends after `Expected Behaviour`.
+
+Length: the whole document must stay under 400 words. Support reads this during a call — every \
+sentence must tell them something they would otherwise have to ask engineering. Cut anything else.
+
+Accuracy rules:
+- Name a specific field, value, or setting ONLY if the card evidence names it. Never round out a list \
+  with plausible-sounding extras: if the card says dimensions are editable, write dimensions, not \
+  "weight, dimensions, and other fields".
+- When a card's human QA Notes conflict with generated test-case scenarios in the comments, trust the \
+  QA Notes — the generated scenarios can contain invented specifics.
+- When the editable/affected fields are not enumerable from the evidence, say "the fields the card \
+  makes editable" rather than guessing which ones.
 
 Formatting rules:
 - Use markdown tables with pipe syntax — header row, separator row (|---|---|), then data rows.
 - Never use giant paragraphs — prefer bullets, numbered lists, and tables.
 - Mention MCSL navigation paths naturally: ORDERS tab, hamburger menu > Products, hamburger menu > Carriers, etc.
 - Call out carrier names explicitly when the feature is carrier-specific.
+- No filler: no "this section describes", no restating the card title, no closing summary.
 - DO NOT add: Merchant-Safe Explanation, Common Questions & Troubleshooting, Support Escalation Packet, \
   The Problem, The Solution, Key Benefits, User Story, Test Scenarios, Acceptance Criteria Checklist, \
   AI Code Analysis, Rollout Notes, or References.
@@ -453,8 +508,35 @@ def _enforce_toggle_scope(markdown_text: str, ctx: HandoffDocContext) -> str:
     return sanitized
 
 
+_CALLOUT_VARIANT_RE = re.compile(
+    r"^[ \t]*[-*][ \t]*`?[ \t]*[-*]?[ \t]*"
+    r"(Request(?: nodes?| /response nodes| /log fields|/response nodes|/log fields) to verify)"
+    r"[ \t]*:?[ \t]*`?[ \t]*",
+    flags=re.IGNORECASE | re.MULTILINE,
+)
+
+
+def _normalize_request_callouts(markdown_text: str) -> str:
+    """Rewrite request/log callout bullets into the one shape the PDF highlights.
+
+    Models copy the label out of the prompt with backticks or a doubled dash
+    ("- `- Request nodes to verify:` ..."), which then renders as plain text
+    instead of a highlighted box. Dropping the label's opening backtick can leave
+    the rest of the line with an odd number of them, so unbalanced backticks are
+    cleared from any line that was rewritten.
+    """
+    lines = []
+    for line in (markdown_text or "").splitlines():
+        fixed = _CALLOUT_VARIANT_RE.sub(lambda m: f"- {m.group(1)}: ", line)
+        if fixed != line and fixed.count("`") % 2:
+            fixed = fixed.replace("`", "")
+        lines.append(fixed)
+    return "\n".join(lines)
+
+
 def _enforce_support_doc_guardrails(markdown_text: str, ctx: HandoffDocContext) -> str:
-    return _enforce_toggle_scope(_enforce_standard_navigation(markdown_text, ctx), ctx)
+    sanitized = _normalize_request_callouts(markdown_text)
+    return _enforce_toggle_scope(_enforce_standard_navigation(sanitized, ctx), ctx)
 
 
 def _fallback_support_doc(ctx: HandoffDocContext) -> str:
@@ -594,12 +676,30 @@ def _story_id(ctx: HandoffDocContext) -> str:
 
 
 def _story_title(ctx: HandoffDocContext) -> str:
-    """Card title with any leading story id stripped, for the `Story Title` column."""
+    """Card title for the `Story Title` column.
+
+    Strips the StoryLab card-name boilerplate ("From SL: ZI-629 — ") so the
+    column holds the title only; the id already has its own column.
+    """
     title = (ctx.card_name or "").strip()
+    title = re.sub(r"^from\s+sl\s*:\s*", "", title, flags=re.IGNORECASE).strip()
     story_id = _story_id(ctx)
     if story_id and title.startswith(story_id):
         title = title[len(story_id):].lstrip(" -–—:#")
     return title or "(untitled card)"
+
+
+def _strip_leading_h1(markdown_text: str) -> str:
+    """Drop a per-card document's own H1 title.
+
+    Inside a combined release package the wrapper already prints
+    "<Story ID> - <Story Title>", so the card's own "# Support Guide: ..."
+    line would render as a duplicate heading.
+    """
+    lines = (markdown_text or "").lstrip().splitlines()
+    if lines and lines[0].startswith("# "):
+        lines = lines[1:]
+    return "\n".join(lines).strip()
 
 
 def _table_cell(value: str) -> str:
@@ -650,7 +750,7 @@ def generate_combined_support_guide(contexts: list[HandoffDocContext], release_n
         parts.extend([
             "",
             f"## {_card_section_heading(ctx)}",
-            _demote_markdown(generate_support_guide(ctx)),
+            _demote_markdown(_strip_leading_h1(generate_support_guide(ctx))),
         ])
     return "\n".join(part for part in parts if part is not None).strip()
 
@@ -676,7 +776,7 @@ def generate_combined_business_brief(contexts: list[HandoffDocContext], release_
         parts.extend([
             "",
             f"## {_card_section_heading(ctx)}",
-            _demote_markdown(generate_business_brief(ctx)),
+            _demote_markdown(_strip_leading_h1(generate_business_brief(ctx))),
         ])
     parts.extend([
         "",
@@ -733,12 +833,25 @@ def _md_to_rl(text: str, sans: str = "Arial") -> str:
         label, url = m.group(1), m.group(2)
         return f'<a href="{url}" color="#1155CC">{label}</a>'
     text = re.sub(r'\[([^\]]+)\]\(([^)\s]+)\)', _link, text)
+    # Stash `code` spans before emphasis handling. A literal asterisk inside a
+    # code span (for example `*.enabled`) must not be read as an italic marker —
+    # otherwise emphasis pairs across two code spans and emits interleaved tags
+    # that ReportLab rejects.
+    code_spans: list[str] = []
+
+    def _stash(m):
+        code_spans.append(m.group(1))
+        return f"\x00{len(code_spans) - 1}\x00"
+
+    text = re.sub(r'`([^`]+)`', _stash, text)
     text = re.sub(r'\*\*\*(.+?)\*\*\*', r'<b><i>\1</i></b>', text)
     text = re.sub(r'\*\*(.+?)\*\*',     r'<b>\1</b>', text)
-    text = re.sub(r'\*(.+?)\*',         r'<i>\1</i>', text)
-    text = re.sub(r'`(.+?)`',           r'<font name="Courier" fontSize="9">\1</font>', text)
+    text = re.sub(r'\*([^*\n]+?)\*',    r'<i>\1</i>', text)
     # Strip any unmatched asterisks left over (e.g. from BDD steps bleeding in)
     text = re.sub(r'\*+', '', text)
+    for index, span in enumerate(code_spans):
+        text = text.replace(f"\x00{index}\x00",
+                            f'<font name="Courier" fontSize="9">{span}</font>')
     return text
 
 
@@ -1050,6 +1163,7 @@ def render_pdf_bytes(title: str, markdown_text: str) -> bytes:
     table_buf: list[str] = []
     seen_card_marker = False
     seen_page_h1 = False
+    seen_card_section = False
 
     def _maybe_flush():
         if table_buf:
@@ -1113,7 +1227,13 @@ def render_pdf_bytes(title: str, markdown_text: str) -> bytes:
             seen_page_h1 = True
             story.extend(_h2_row(clean[2:].strip()))
         elif clean.startswith("## "):
-            story.extend(_h2_row(clean[3:].strip()))
+            heading = clean[3:].strip()
+            # Every story card starts on its own page — including the first, so the
+            # index page stands alone and no card begins halfway down another page.
+            if is_card_section_heading(heading):
+                story.append(PageBreak())
+                seen_card_section = True
+            story.extend(_h2_row(heading))
         elif clean.startswith("### "):
             story.append(Paragraph(_md_to_rl(clean[4:].strip()), h3_style))
         elif re.match(r"^- \[[ xX]\]", clean):
