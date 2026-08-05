@@ -702,14 +702,26 @@ def _register_fonts() -> tuple[str, str]:
         return "Helvetica", "Times-Roman"
 
 
+_EMOJI_RE = re.compile(
+    "[\U0001F300-\U0001FFFF\U00002600-\U000027BF\U0000FE00-\U0000FE0F]+",
+    flags=re.UNICODE,
+)
+
+
+def _strip_emoji(text: str) -> str:
+    """Drop emoji — the embedded PDF fonts render them as blank boxes."""
+    return _EMOJI_RE.sub("", text or "").strip()
+
+
 def _md_to_rl(text: str, sans: str = "Arial") -> str:
     """Convert basic markdown inline formatting to ReportLab XML tags."""
+    text = _strip_emoji(text)
+    text = text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
     # Markdown links [label](url) → clickable ReportLab anchors. Do this first so the
     # label/url (which never contain markdown emphasis) survive the asterisk handling.
     def _link(m):
         label, url = m.group(1), m.group(2)
-        href = url.replace('&', '&amp;')
-        return f'<a href="{href}" color="#1155CC">{label}</a>'
+        return f'<a href="{url}" color="#1155CC">{label}</a>'
     text = re.sub(r'\[([^\]]+)\]\(([^)\s]+)\)', _link, text)
     text = re.sub(r'\*\*\*(.+?)\*\*\*', r'<b><i>\1</i></b>', text)
     text = re.sub(r'\*\*(.+?)\*\*',     r'<b>\1</b>', text)
@@ -718,6 +730,31 @@ def _md_to_rl(text: str, sans: str = "Arial") -> str:
     # Strip any unmatched asterisks left over (e.g. from BDD steps bleeding in)
     text = re.sub(r'\*+', '', text)
     return text
+
+
+# Brand line shown under the PDF title. Keep the handoff PDF styling identical
+# across the MCSL / FedEx / AU Post repos — only this brand string differs.
+PDF_BRAND = "PluginHive MCSL"
+
+
+def _pdf_subtitle(title: str, markdown_text: str) -> str:
+    """Brand + platform/carrier scope line for the PDF header panel."""
+    parts = [PDF_BRAND]
+    platform_names = detect_platform_scope(title, markdown_text)
+    if platform_names:
+        parts.append(" / ".join(platform_names))
+    carriers_found = re.findall(
+        r'\b(Australia Post|eParcel|MyPost|FedEx|UPS|DHL|USPS|Stamps)\b', title, re.IGNORECASE,
+    )
+    if carriers_found:
+        canonical = {
+            "ups": "UPS", "dhl": "DHL", "usps": "USPS", "fedex": "FedEx",
+            "eparcel": "eParcel", "mypost": "MyPost", "stamps": "Stamps",
+            "australia post": "Australia Post",
+        }
+        names = [canonical.get(c.lower(), c.title()) for c in carriers_found]
+        parts.append("  /  ".join(dict.fromkeys(names)))
+    return "  ·  ".join(parts)
 
 
 def render_pdf_bytes(title: str, markdown_text: str) -> bytes:
@@ -813,16 +850,7 @@ def render_pdf_bytes(title: str, markdown_text: str) -> bytes:
     clean_title = re.sub(r'\[#\d+\]', '', title).strip()
     clean_title = re.sub(r'From SL:\s*[A-Z]+-\d+\s*[—–-]\s*', '', clean_title).strip()
 
-    carriers_found = re.findall(
-        r'\b(Australia Post|eParcel|MyPost|FedEx|UPS|DHL|USPS|Stamps)\b', title, re.IGNORECASE,
-    )
-    platform_names = detect_platform_scope(title, markdown_text)
-    subtitle = "PluginHive MCSL"
-    if platform_names:
-        subtitle = "PluginHive MCSL  ·  " + " / ".join(platform_names)
-    if carriers_found:
-        carrier_part = "  /  ".join(dict.fromkeys(c.title() for c in carriers_found))
-        subtitle = f"{subtitle}  ·  {carrier_part}"
+    subtitle = _pdf_subtitle(title, markdown_text)
 
     # ── Parse markdown ───────────────────────────────────────────────────────
     lines = (markdown_text or "").splitlines()
@@ -922,6 +950,44 @@ def render_pdf_bytes(title: str, markdown_text: str) -> bytes:
                                textColor=C_TEXT, spaceAfter=3, leftIndent=16)
     node_sty = _ps("NodeCallout", fontName=f"{SANS}-Bold", fontSize=10, leading=14,
                                textColor=HexColor("#1e3a8a"), spaceAfter=0)
+    code_sty = _ps("Code",    fontName="Courier",        fontSize=8.5, leading=12,
+                               textColor=C_TEXT)
+    note_sty = _ps("Note",    fontName=SANS,             fontSize=10,  leading=14,
+                               textColor=C_TEXT)
+
+    def _code_block(code_lines: list[str]):
+        """Fenced ``` block → monospace box."""
+        body = "<br/>".join(
+            (ln.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+               .replace(" ", "&nbsp;")) or "&nbsp;"
+            for ln in code_lines
+        )
+        tbl = Table([[Paragraph(body, code_sty)]], colWidths=[CW])
+        tbl.setStyle(TableStyle([
+            ("BACKGROUND",    (0, 0), (-1, -1), HexColor("#f1f5f9")),
+            ("BOX",           (0, 0), (-1, -1), 0.5, C_BORDER),
+            ("LEFTPADDING",   (0, 0), (-1, -1), 10),
+            ("RIGHTPADDING",  (0, 0), (-1, -1), 10),
+            ("TOPPADDING",    (0, 0), (-1, -1), 8),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 8),
+        ]))
+        return tbl
+
+    def _callout(quote_lines: list[str]):
+        """Blockquote → note box; gold tint when it reads as a warning/QA note."""
+        joined = " ".join(quote_lines).lower()
+        warn = any(kw in joined for kw in ("warning", "caution", "qa note", "confirm"))
+        body = "<br/>".join(_md_to_rl(ln) if ln.strip() else "&nbsp;" for ln in quote_lines)
+        tbl = Table([[Paragraph(body, note_sty)]], colWidths=[CW])
+        tbl.setStyle(TableStyle([
+            ("BACKGROUND",    (0, 0), (-1, -1), HexColor("#fefce8") if warn else HexColor("#f1f5f9")),
+            ("LINEBEFORE",    (0, 0), (0, -1),  3, C_GOLD if warn else C_ACCENT),
+            ("LEFTPADDING",   (0, 0), (-1, -1), 12),
+            ("RIGHTPADDING",  (0, 0), (-1, -1), 12),
+            ("TOPPADDING",    (0, 0), (-1, -1), 9),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 9),
+        ]))
+        return tbl
 
     def _flush_table(raw_rows: list[str]) -> None:
         """Parse buffered markdown table lines and append a styled ReportLab Table."""
@@ -969,14 +1035,42 @@ def render_pdf_bytes(title: str, markdown_text: str) -> bytes:
     # ── Render content (with table buffering) ────────────────────────────────
     table_buf: list[str] = []
     seen_card_marker = False
+    seen_page_h1 = False
 
     def _maybe_flush():
         if table_buf:
             _flush_table(list(table_buf))
             table_buf.clear()
 
-    for line in content_lines:
+    idx = 0
+    while idx < len(content_lines):
+        line = content_lines[idx]
+        idx += 1
         clean = line.strip()
+
+        # Fenced code block
+        if clean.startswith("```"):
+            _maybe_flush()
+            code_lines: list[str] = []
+            while idx < len(content_lines) and not content_lines[idx].strip().startswith("```"):
+                code_lines.append(content_lines[idx])
+                idx += 1
+            idx += 1  # closing fence
+            if code_lines:
+                story.append(_code_block(code_lines))
+                story.append(Spacer(1, 0.08 * inch))
+            continue
+
+        # Blockquote / callout block
+        if clean.startswith(">"):
+            _maybe_flush()
+            quote_lines = [re.sub(r"^>\s?", "", clean)]
+            while idx < len(content_lines) and content_lines[idx].strip().startswith(">"):
+                quote_lines.append(re.sub(r"^>\s?", "", content_lines[idx].strip()))
+                idx += 1
+            story.append(_callout(quote_lines))
+            story.append(Spacer(1, 0.08 * inch))
+            continue
 
         # Table row detection
         if clean.startswith("|"):
@@ -988,15 +1082,24 @@ def render_pdf_bytes(title: str, markdown_text: str) -> bytes:
         if not clean:
             story.append(Spacer(1, 0.05 * inch))
             continue
+        if re.fullmatch(r"(-{3,}|\*{3,}|_{3,})", clean):
+            story.append(HRFlowable(width=CW, thickness=0.5, color=C_BORDER,
+                                    spaceBefore=4, spaceAfter=6))
+            continue
         if re.match(r"^CARD\s+\d+/\d+$", clean, flags=re.IGNORECASE):
             if seen_card_marker:
                 story.append(PageBreak())
             seen_card_marker = True
             story.append(Paragraph(_md_to_rl(clean), body_style))
             continue
-        if clean.startswith("## ") or (clean.startswith("# ") and not skip_h1):
-            prefix = "## " if clean.startswith("## ") else "# "
-            story.extend(_h2_row(clean[len(prefix):].strip()))
+        if clean.startswith("# ") and not clean.startswith("## "):
+            # A later H1 starts a new document section — give it its own page.
+            if seen_page_h1:
+                story.append(PageBreak())
+            seen_page_h1 = True
+            story.extend(_h2_row(clean[2:].strip()))
+        elif clean.startswith("## "):
+            story.extend(_h2_row(clean[3:].strip()))
         elif clean.startswith("### "):
             story.append(Paragraph(_md_to_rl(clean[4:].strip()), h3_style))
         elif re.match(r"^- \[[ xX]\]", clean):
