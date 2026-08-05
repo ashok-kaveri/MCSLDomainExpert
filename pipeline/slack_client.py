@@ -5,6 +5,7 @@ Uses raw requests — do NOT add slack_sdk dependency.
 """
 from __future__ import annotations
 
+import json
 import logging
 import os
 import re
@@ -255,33 +256,79 @@ def upload_file_to_slack_channel(
     file_bytes: bytes,
     title: str = "",
     initial_comment: str = "",
+    thread_ts: str = "",
 ) -> dict:
-    """Upload a file to a Slack channel using files.upload."""
+    """Upload a file to a Slack channel or DM.
+
+    Uses Slack's external-upload flow (``files.getUploadURLExternal`` ->
+    PUT/POST to the returned URL -> ``files.completeUploadExternal``). The old
+    ``files.upload`` endpoint Slack retired is no longer attempted.
+    Requires the bot to have the ``files:write`` scope.
+    """
     token = os.getenv("SLACK_BOT_TOKEN", "").strip()
     if not token:
         return {"ok": False, "file_id": "", "error": "SLACK_BOT_TOKEN is not set"}
     if not channel_id:
         return {"ok": False, "file_id": "", "error": "No channel selected"}
+    if not file_bytes:
+        return {"ok": False, "file_id": "", "error": "No file bytes to upload"}
+    headers = {"Authorization": f"Bearer {token}"}
     try:
-        resp = requests.post(
-            f"{SLACK_API}/files.upload",
-            headers={"Authorization": f"Bearer {token}"},
-            data={
-                "channels": channel_id,
-                "filename": filename,
-                "title": title or filename,
-                "initial_comment": initial_comment,
-            },
-            files={"file": (filename, file_bytes)},
-            timeout=30,
+        reserve = requests.get(
+            f"{SLACK_API}/files.getUploadURLExternal",
+            headers=headers,
+            params={"filename": filename, "length": len(file_bytes)},
+            timeout=20,
+        ).json()
+        if not reserve.get("ok"):
+            return {"ok": False, "file_id": "",
+                    "error": reserve.get("error", "getUploadURLExternal failed")}
+
+        put = requests.post(
+            reserve["upload_url"], files={"file": (filename, file_bytes)}, timeout=60,
         )
-        resp.raise_for_status()
-        data = resp.json()
-        if not data.get("ok"):
-            return {"ok": False, "file_id": "", "error": data.get("error", "unknown_error")}
-        return {"ok": True, "file_id": data.get("file", {}).get("id", ""), "error": ""}
+        if put.status_code != 200:
+            return {"ok": False, "file_id": "", "error": f"upload POST status {put.status_code}"}
+
+        payload = {
+            "files": json.dumps([{"id": reserve["file_id"], "title": title or filename}]),
+            "channel_id": channel_id,
+        }
+        if initial_comment:
+            payload["initial_comment"] = initial_comment
+        if thread_ts:
+            payload["thread_ts"] = thread_ts
+        done = requests.post(
+            f"{SLACK_API}/files.completeUploadExternal",
+            headers=headers, data=payload, timeout=20,
+        ).json()
+        if not done.get("ok"):
+            return {"ok": False, "file_id": "",
+                    "error": done.get("error", "completeUploadExternal failed")}
+        return {"ok": True, "file_id": reserve["file_id"], "error": ""}
     except Exception as exc:
         return {"ok": False, "file_id": "", "error": str(exc)}
+
+
+def lookup_slack_user_by_email(email: str) -> tuple[str, str]:
+    """Resolve a Slack user id from an email. Returns (user_id, error)."""
+    token = os.getenv("SLACK_BOT_TOKEN", "").strip()
+    if not token:
+        return "", "SLACK_BOT_TOKEN is not set"
+    if not (email or "").strip():
+        return "", "No email provided"
+    try:
+        resp = requests.get(
+            f"{SLACK_API}/users.lookupByEmail",
+            headers={"Authorization": f"Bearer {token}"},
+            params={"email": email.strip()},
+            timeout=15,
+        ).json()
+        if not resp.get("ok"):
+            return "", resp.get("error", "users.lookupByEmail failed")
+        return resp.get("user", {}).get("id", ""), ""
+    except Exception as exc:
+        return "", str(exc)
 
 
 def upload_file_to_slack_user(

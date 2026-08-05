@@ -110,6 +110,25 @@ For one requested release document, create one combined PDF containing all selec
 
 For both, create two combined PDFs: one Support Guide package and one Business Brief package.
 
+## Slack Delivery (approval required)
+
+After rendering a PDF, always offer to send it to Slack. Never send without explicit approval in the current turn.
+
+1. Report the PDF path, then run the dry run so the user sees the exact target:
+
+   ```bash
+   python3 scripts/send_handoff_pdf_to_slack.py --pdf <pdf path> --title "<doc title>"
+   ```
+
+   Without `--yes` nothing is sent — it prints target, filename, size, and the message text.
+
+2. Ask the user to approve that target. Default target is a Slack DM to the doc owner, so the PDF can be checked before it reaches the team.
+3. Only after the user answers yes, re-run the same command with `--yes` appended.
+4. To send to the team instead, add `--channel` — with no value it targets `qa_members_internal`, the default release destination. Name another channel explicitly when asked, for example `--channel qa-team`. Treat a channel send as a separate approval — approval for a DM is not approval for a channel.
+5. Report the result: target, file id on success, or the exact Slack error on failure.
+
+Do not batch this. One approval covers one send to one target.
+
 ## Combined Release Package Structure
 
 Combined Support Guide:
