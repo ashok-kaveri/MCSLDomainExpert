@@ -390,3 +390,51 @@ def test_each_card_section_starts_on_a_new_pdf_page():
     # header/index page, ZI-001 page, ZI-002 page.
     pages = pdf.count(b"/Type /Page") - pdf.count(b"/Type /Pages")
     assert pages == 3, pages
+
+
+def test_detect_toggles_drops_substring_duplicates():
+    """A bare tail mention is the same toggle as the fully-qualified key."""
+    from pipeline.handoff_docs import detect_toggles
+
+    text = (
+        '"{shop}.myshopify.com.product.status.enabled": true\n'
+        "the toggle product.status.enabled is ON\n"
+    )
+    assert detect_toggles(text) == ["{shop}.myshopify.com.product.status.enabled"]
+
+
+def test_card_without_a_story_id_still_gets_its_own_page():
+    """Real FedEx card "[F-DIM] Bulk Edit ..." has no story id — it must not share a page."""
+    from pipeline.handoff_docs import (
+        is_card_section_heading,
+        is_combined_package,
+        render_pdf_bytes,
+    )
+
+    doc = "\n".join([
+        "# FedEx App v2.3.122 Support Guide",
+        "",
+        "## Included Story Cards",
+        "| Story ID | Story Title | Toggle Name | Trello card link |",
+        "|---|---|---|---|",
+        "| FDX-1 | A | None | - |",
+        "| - | [F-DIM] Bulk Edit | None | - |",
+        "",
+        "## FDX-1 - A",
+        "### Brief Description",
+        "x",
+        "",
+        "## [F-DIM] Bulk Edit Product Dimensions",
+        "### Brief Description",
+        "y",
+    ])
+    assert is_combined_package(doc.splitlines())
+    assert is_card_section_heading("[F-DIM] Bulk Edit Product Dimensions", True)
+    # package-level headings never break, and single-card docs never treat their
+    # own sections as cards
+    assert not is_card_section_heading("Included Story Cards", True)
+    assert not is_card_section_heading("Brief Description", False)
+
+    pdf = render_pdf_bytes("FedEx App v2.3.122 Support Guide", doc)
+    pages = pdf.count(b"/Type /Page") - pdf.count(b"/Type /Pages")
+    assert pages == 3, pages
