@@ -10,7 +10,6 @@
 | ZI-645 | Canpar service renaming [#381046] | None | [ZI-645](https://trello.com/c/xsNKxIVF/4686-from-sl-zi-645-canpar-service-renaming-381046) |
 | ZI-646 | Delivro carrierCode missing — service fallback [#381046] | None | [ZI-646](https://trello.com/c/dJc4YbM8/4687-from-sl-zi-646-delivro-carriercode-missing-service-fallback-381046) |
 | ZI-647 | Delivro multiple labels generating for single order [#381046] | None | [ZI-647](https://trello.com/c/JxNywUEn/4688-from-sl-zi-647-delivro-multiple-labels-generating-for-single-order-381046) |
-| ZI-648 | Delivro name translation (Deliveroo) [#381046] | None | [ZI-648](https://trello.com/c/djupi28C/4689-from-sl-zi-648-delivro-name-translation-deliveroo-381046) |
 | ZI-650 | WSS filter view cut off on scroll [#397045] | None | [ZI-650](https://trello.com/c/Rjr3QMvr/4691-from-sl-zi-650-wss-filter-view-cut-off-on-scroll-397045) |
 | ZI-651 | WSS order updates not syncing after edit [#375662] | {accountUUID}.wc.cancelled.order.reactivation.enabled | [ZI-651](https://trello.com/c/UQPDRAGJ/4692-from-sl-zi-651-wss-order-updates-not-syncing-after-edit-375662) |
 | ZI-652 | USPS REST Puerto Rico country code [#396604] | None | [ZI-652](https://trello.com/c/IAgSsUXt/4693-from-sl-zi-652-usps-rest-puerto-rico-country-code-396604) |
@@ -96,7 +95,6 @@ Prior to this fix, the MCSL WooCommerce plugin sent `status=publish` as a hardco
 **Scenario 2 — Regression: standard products unaffected**
 
 6. After the same bulk import, confirm all previously importable standard publicly visible products still appear in the MCSL Products list.
-7. Confirm draft and private products are **not** present in the MCSL Products list.
 
 ### Expected Behaviour
 
@@ -265,21 +263,12 @@ When the Delivro carrier document in the database was missing the `carrierCode` 
 7. Request rates for an order served by a non-Delivro carrier — confirm rates return normally and no `carrierMapper` fallback is logged for that carrier.
 8. In the request log, confirm no `ruleId` anomaly appears for non-Delivro carriers.
 
-### Expected Behaviour
-
-| What support should observe | How to confirm |
-|---|---|
-| Delivro rates appear at checkout regardless of whether `carrierCode` is present in the carrier document | Live checkout test on WooCommerce store |
-| `ruleId` in the rate request is fully formed — no `undefined` value in any segment | Request log in hamburger menu > Settings > Request Log |
-| If fallback was used, a warning-level (not error-level) log entry references the carrier ID/name used for inference | Same request log entry — severity must be warning, not error |
-| Non-Delivro carrier rate quotes and `ruleId` values are identical to pre-fix behaviour | Request log entries for other configured carriers show no `carrierMapper` fallback invocation |
-
 ## ZI-647 - Delivro multiple labels generating for single order [#381046]
 *From SL: ZI-647 — Delivro multiple labels generating for single order [#381046]*
 
 ### Brief Description
 
-Prior to this fix, Delivro label generation in MCSL produced one label per product line item rather than one label per package. A WooCommerce order with 5 products × 3 quantity in a single package would generate 15 labels instead of 1. The fix corrects `itemsFor()` in `delivro/requestBuilder.js` to consolidate line items into package-level entries before sending the Delivro API request.
+Prior to this fix, Delivro label generation in MCSL produced one label per product line item rather than one label per package. An order with 5 products × 3 quantity in a single package would generate 15 labels instead of 1. The fix corrects `itemsFor()` in `delivro/requestBuilder.js` to consolidate line items into package-level entries before sending the Delivro API request.
 
 ### Toggles & Prerequisites
 
@@ -287,76 +276,25 @@ Prior to this fix, Delivro label generation in MCSL produced one label per produ
 |---|---|
 | No toggle | Fix is code-level; no merchant setting to enable |
 | Delivro carrier required | Confirm Delivro is configured under hamburger menu > Carriers |
-| WooCommerce platform | Reported and tested on WooCommerce; validate on the merchant's WooCommerce store |
 | Packaging rules in use | Confirm packaging is configured under hamburger menu > Settings / Packaging if multi-package behaviour is being tested |
 
 ### Step-by-Step Support Walkthrough
 
 **Scenario 1 — Single package, multiple products (customer reproduction)**
 
-1. In WooCommerce Orders, open the affected order and go to ORDERS tab > open order > Prepare Shipment.
+1. Open the affected order and go to ORDERS tab > open order > Prepare Shipment.
 2. Confirm the order is packed into one package and Delivro is the selected carrier.
 3. Click Generate Label and confirm exactly **1** label PDF is produced and **1** tracking number is stored on the order.
 - Request nodes to verify: confirm the outbound Delivro request in hamburger menu > Settings / Request Log shows a single consolidated package item — not one entry per line item or per unit quantity.
 
 **Scenario 2 — Multi-package order (1 label per package)**
 
-4. Open a WooCommerce order that splits into 2 packages under the configured packaging rules.
+4. Open an order that splits into 2 packages under the configured packaging rules.
 5. Select Delivro as the carrier and click Generate Label.
 6. Confirm **2** label PDFs are produced, each with a distinct tracking number — label count must equal package count, not line-item count.
 - Request nodes to verify: Request Log should show one Delivro API call per package, each with its own consolidated item payload and a unique shipment/tracking ID in the response.
 7. To verify no regression, repeat label generation on the same order type using a non-Delivro carrier and confirm label count matches that carrier's pre-fix behaviour.
-8. Check that no duplicate or phantom shipment records appear on the WooCommerce order after label generation.
-
-### Expected Behaviour
-
-| What support should observe | How to confirm |
-|---|---|
-| 1 label per package, not per line item or unit | Label PDF count on the order equals package count |
-| Single tracking number per package stored on order | WooCommerce order detail shows no duplicate tracking entries |
-| Consolidated package item in Delivro request payload | Request Log shows item array length = number of packages, not total units |
-| Non-Delivro carrier label generation unchanged | Label count for other carriers matches pre-fix behaviour; `delivro/requestBuilder.js` not invoked |
-
-## ZI-648 - Delivro name translation (Deliveroo) [#381046]
-*From SL: ZI-648 — Delivro name translation (Deliveroo) [#381046]*
-
-### Brief Description
-
-A customer reported seeing "Deliveroo" in their checkout, suspecting a PluginHive mistranslation of the carrier name "Delivro." Investigation confirmed no code change was needed: PluginHive consistently renders the carrier as "Delivro" across all definition sites. The "Deliveroo" string originates from a WooCommerce flat-rate shipping method the merchant configured themselves, not from PluginHive.
-
-### Toggles & Prerequisites
-
-| Toggle / config note | What support should confirm |
-|---|---|
-| No toggle | No code change shipped; this is a support-resolved ticket |
-| WooCommerce shipping zones | Merchant must have a flat-rate method manually named "Deliveroo" in their zone |
-| Delivro carrier account | Confirm Delivro is connected under hamburger menu > Carriers |
-| MCSL 384 | Confirm store is on MCSL 384 or later if verifying release context |
-
-### Step-by-Step Support Walkthrough
-
-**Scenario 1 — Confirm PluginHive renders "Delivro", not "Deliveroo"**
-
-1. In WooCommerce Admin, open the PluginHive MCSL app and navigate to hamburger menu > Carriers — confirm the carrier is listed as **Delivro**.
-2. Navigate to ORDERS tab > open an affected order > Prepare Shipment — confirm the carrier label shown reads **Delivro**.
-3. If a label has been generated, download the label PDF and confirm **"Deliveroo" does not appear** anywhere on the PluginHive-generated output.
-- Request/response nodes to verify: carrier name field should read "Delivro" / DELIVRO in the Delivro API request and response
-4. Check hamburger menu > Settings > Request Log for the relevant order — confirm the outbound carrier name is **Delivro**, not Deliveroo.
-
-**Scenario 2 — Isolate the merchant's WooCommerce flat-rate method as the source**
-
-5. In WordPress Admin, go to WooCommerce > Settings > Shipping > Shipping Zones — locate the zone and inspect the flat-rate method names configured by the merchant.
-6. Confirm a method named **"Deliveroo"** exists there and was created by the merchant, not by PluginHive.
-7. Ask the merchant to rename or remove that flat-rate method, then have a test customer refresh checkout — confirm the "Deliveroo" label disappears while PluginHive-sourced **"Delivro"** rates remain.
-
-### Expected Behaviour
-
-| What support should observe | How to confirm |
-|---|---|
-| PluginHive settings and carrier list show "Delivro" only | hamburger menu > Carriers — no "Deliveroo" string present |
-| Checkout "Deliveroo" entry traces to merchant's flat-rate method | WooCommerce Shipping Zones shows merchant-created method named "Deliveroo" |
-| API request/response carries carrier name "Delivro" / DELIVRO | Request Log in hamburger menu > Settings confirms outbound node value |
-| Removing merchant's flat-rate method removes "Deliveroo" from checkout | Test checkout after merchant deletes/renames the WooCommerce method |
+8. Check that no duplicate or phantom shipment records appear on the order after label generation.
 
 ## ZI-650 - WSS filter view cut off on scroll [#397045]
 *From SL: ZI-650 — WSS filter view cut off on scroll [#397045]*
@@ -416,20 +354,28 @@ When a WooCommerce order was cancelled and then moved back to Processing, the MC
 
 ### Step-by-Step Support Walkthrough
 
-**Scenario 1 — Cancelled order reactivated and re-imported**
+**Toggle ON**
 
-1. Confirm the reactivation toggle is ON for the merchant's account UUID before testing.
-2. In WooCommerce Orders, cancel an order that has already been imported to WSS, then move it back to **Processing**.
-3. Wait approximately 60–75 seconds for the WSS sync to fire.
-4. In MCSL **ORDERS** tab, locate the order and confirm it appears active with the current WooCommerce shipping address and line items.
-- Request/log fields to verify: sync log line reading `"has 1 CANCELLED sub-order(s) — falling through for reactivation"` confirms the new code path ran.
-5. Attempt **Prepare Shipment / Generate Label** on the reactivated order and confirm no batch-association error blocks label generation.
+1. Import a WooCommerce order into WSS — confirm it appears in the orders grid.
+2. Generate a shipping label for the order in WSS.
+3. Go to WooCommerce admin → cancel the same order.
+4. Change the order status back to Processing in WooCommerce.
+5. Wait ~60 seconds for the sync to fire.
+6. Open WSS — verify the order reappears as active with the current shipping address.
+7. Attempt to generate a new label for the order.
 
-**Scenario 2 — Toggle OFF or kill-switch active (legacy path)**
+Expected: Old label is cancelled, order is re-eligible for label generation, new label generates successfully.
 
-6. With the toggle OFF (or kill-switch set), repeat steps 2–3.
-7. In MCSL **ORDERS** tab, confirm the order shows an order-diff record rather than a re-import; no fall-through log line should appear.
-8. Confirm a never-cancelled Processing order still syncs address changes in place within ~60 seconds (regression check via hamburger menu > **Request Log**).
+**Toggle OFF**
+
+1. Import a WooCommerce order into WSS — confirm it appears in the orders grid.
+2. Generate a shipping label for the order in WSS.
+3. Go to WooCommerce admin → cancel the same order.
+4. Change the order status back to Processing in WooCommerce.
+5. Wait ~60 seconds.
+6. Open WSS — check the order status.
+
+Expected: WSS does NOT auto-sync the reactivation — order retains the pre-cancel snapshot. Manual re-import is required to update it.
 
 ### Expected Behaviour
 
@@ -570,22 +516,22 @@ When a merchant edits shipping on a Shopify order (delete + re-add), MCSL was re
 
 ### Brief Description
 
-MCSL 384 adds a read-only **Customer selected rate** field to the order details page in the MCSL app on Shopify. It surfaces the shipping rate the customer chose at checkout (carrier name + amount) directly inside the order, so support and merchants no longer need to cross-reference Shopify Admin to identify what the customer paid for shipping. The field is display-only and has no effect on rate shopping or label generation. Carriers covered: FedEx, UPS, DHL, USPS.
+MCSL 384 adds a read-only **Customer selected rate** field to the order details page in the MCSL app. It surfaces the shipping rate the customer chose at checkout (carrier name + amount) directly inside the order, so support and merchants no longer need to cross-reference the store admin to identify what the customer paid for shipping. The field is display-only and has no effect on rate shopping or label generation. Available on both Shopify and WooCommerce. Carriers covered: FedEx, UPS, DHL, USPS.
 
 ### Toggles & Prerequisites
 
 | Toggle / config note | What support should confirm |
 |---|---|
-| No toggle | Feature is always active in MCSL 384+ on Shopify |
-| Shopify store on MCSL 384 | Confirm app version before troubleshooting missing field |
-| Checkout rate must have been captured at order time | Orders placed before this release, draft orders, or orders with no `selectedShippingRate` will show blank or N/A — this is expected |
+| No toggle | Feature is always active in MCSL 384+ on Shopify and WooCommerce |
+| Store on MCSL 384 | Confirm app version before troubleshooting missing field; applies to both Shopify and WooCommerce |
+| Checkout rate must have been captured at order time | Orders placed before this release, draft orders, or orders with no captured checkout rate will show blank or N/A — this is expected |
 | Display-only field | Confirm merchant understands this value does not pre-select or influence rate shopping |
 
 ### Step-by-Step Support Walkthrough
 
 **Scenario 1 — Verifying the field displays correctly**
 
-1. In Shopify Admin, open the MCSL app and go to the **ORDERS** tab.
+1. In Shopify Admin or WooCommerce Admin, open the MCSL app and go to the **ORDERS** tab.
 2. Open an order placed after the MCSL 384 release where the customer selected a carrier rate at checkout.
 3. On the order details page, locate the **Customer selected rate** field and confirm it shows carrier name and amount (e.g., `UPS Ground — $12.45`) in the store's checkout currency.
 4. Open a second order for a different carrier (FedEx, DHL, or USPS) and confirm the field reflects that carrier's rate and amount.
@@ -702,17 +648,21 @@ On BigCommerce stores, PostNord shipment requests for zero-value orders were sen
 | BigCommerce only | WooCommerce PostNord path is explicitly not changed — confirm platform before investigating |
 | PostNord carrier required | Confirm PostNord is the active carrier on the order being tested |
 | Zero-value order condition | Confirm `order.total = 0`; non-zero orders follow the existing conversion path |
+| Order currency | Should be EUR to reproduce the conversion described below |
+| Store/Shipment currency | Should be SEK — PostNord's carrier currency |
 
 ### Step-by-Step Support Walkthrough
 
 **Scenario 1 — Zero-value BigCommerce PostNord order**
 
-1. In BigCommerce admin, locate a zero-value order and open it in the MCSL ORDERS tab.
+1. In BigCommerce admin, locate a zero-value order (order currency EUR) and open it in the MCSL ORDERS tab.
 2. Click **Prepare Shipment / Generate Label** and select PostNord as the carrier.
-3. Open hamburger menu > **Request Log** immediately after label generation.
-4. Inspect the outbound PostNord shipment request payload.
-- Request nodes to verify: rate: 1 and currency: "SEK" present at shipment level; no store currency (e.g., AUD, USD) on that field
-5. Confirm the generated label shows a declared value of **SEK 1.00**.
+3. Confirm the **Rate Summary**:
+   - Displays the minimum shipment value after converting 1 SEK into the order currency.
+   - Example: 1 SEK = 0.09 EUR.
+4. Generate the label and confirm the **Label**:
+   - Applies the minimum shipment value based on the order currency and converts it back to the shipment currency.
+   - Example: 1 EUR = 11.06 SEK.
 
 **Scenario 2 — Non-zero BigCommerce order (regression check)**
 
@@ -725,8 +675,8 @@ On BigCommerce stores, PostNord shipment requests for zero-value orders were sen
 
 | What support should observe | How to confirm |
 |---|---|
-| Zero-value BigCommerce PostNord payload always emits `rate: 1`, `currency: "SEK"` | Request log — shipment-level nodes |
-| Label for zero-value order shows declared value SEK 1.00 | Inspect generated label document |
+| Rate Summary displays the minimum shipment value after converting 1 SEK into the order currency (e.g., 1 SEK = 0.09 EUR) | Compare the Rate Summary value against the current SEK-to-order-currency rate |
+| Label applies the minimum shipment value based on the order currency and converts it back to the shipment currency (e.g., 1 EUR = 11.06 SEK) | Inspect the generated label's declared value in SEK |
 | Non-zero orders use existing currency conversion, not the hardcoded values | Request log — `rate` reflects converted amount, not `1` |
 | WooCommerce PostNord label generation is unchanged | Generate a WooCommerce PostNord label; no SEK-forcing behaviour in request log |
 
