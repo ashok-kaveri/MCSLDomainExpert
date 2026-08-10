@@ -34,6 +34,29 @@ Use `mcsl-slack-operator` to send PDFs or messages to Slack when explicitly requ
 
 For release packages, always use full live Trello card context when available: description, comments, labels, attachments/checklist summaries, approved AC/TCs, and AI QA evidence. QA comments often contain late caveats and must not be skipped.
 
+## Excluded Cards
+
+Before anything else, drop cards that are not part of the release story set. Exclude any card carrying one of these labels:
+
+- `SL: ON Hold`
+- `SL: Carrier Platform`
+- `Spill Over`
+- `SL: Closed By Support`
+
+Rules:
+
+- Match labels case-insensitively and tolerate emoji, colour prefixes, and extra spacing around the name.
+- Exclude the card from the index table as well as the body. A card left out of the body but listed in the index reads as a missing section.
+- Include an excluded card only when the user names it or explicitly asks for it. Naming the card is the instruction — do not ask again.
+- Never drop the card silently. Always report which cards were excluded and which label triggered it, so a short release is visibly deliberate.
+- Excluded cards contribute no toggles to the `Toggle List Follow-Up` DM.
+
+Before writing any release package, do a toggle audit for every card:
+
+- Search the whole card for the toggle, not just the description: comments, checklists, attachments, approved AC, TCs, and QA evidence. The exact toggle key is often only in a QA or developer comment.
+- Put the exact key in the index table `Toggle Name` column. List every key comma-separated when a card has more than one, and `None` when the card needs no toggle.
+- Never guess or reconstruct a toggle key. If the card clearly needs one but no key is stated anywhere, write `Not stated` and flag it in the final response.
+
 Before writing a release Support Guide, do a payload/log audit for every card:
 
 - If the evidence asks support to inspect a carrier request, response, payload, request log, diagnostic log, invoice request, tracking payload, report source field, or automation-rule log, include the exact node/field name support must verify.
@@ -44,6 +67,13 @@ Before writing a release Support Guide, do a payload/log audit for every card:
   - `Request/log fields to verify: ...`
 - Do not add node callouts to UI-only, report-only, sync-only, or performance cards unless card evidence names an actual request/log field.
 - If the exact field is unknown after checking card comments/checklists and code/context, say what log to inspect in troubleshooting and do not invent a node name.
+
+Before writing Support Guide or Business Brief content, do a technical-card audit for every card:
+
+- A technical card is one only a developer cares about: an API-only change, a library or version upgrade, a refactor, an internal clean-up, or infrastructure work with nothing support or the merchant can see or do.
+- Move every technical card into a single `## Technical Cards` section placed after the last normal card section. Keep each entry to a few lines: what changed and why it matters.
+- Keep technical cards in their normal position in the index table — only the body section moves.
+- If a card has both a technical part and something support can see or demo, keep it as a normal card.
 
 Before writing Support Guide or Business Brief content, do a platform audit for every card:
 
@@ -85,7 +115,9 @@ If unclear, ask which one: Support Guide, Business Brief, or both.
 
 The Support Guide is for support/demo teams who need to understand the feature well enough to explain it to customers.
 
-It must be practical, professional, and support-friendly and very crisp and do not use any Technical jargon
+It must be practical, professional, and support-friendly and very crisp and do not use any Technical jargon.
+
+Use no technical words anywhere in the body of either document: no code, class, file, or method names, no API or schema jargon, and no internal engineering terms. Write it the way you would explain the feature to someone who has never seen the code. Three places are exempt, because the exact string is the point: the request/log callouts described above, the `Technical Cards` section, and toggle keys in the index table and `Toggles & Prerequisites` tables.
 
 - Include the Index Page with exactly these columns: "Story ID", "Story Title", "Toggle Name", "Trello card link"
 - Explain"Brief Feature Summary" in a title called "Brief Description" Keep it very crisp
@@ -138,6 +170,28 @@ Ask first only when:
 
 Always report the outcome: target, file id on success, or the exact Slack error on failure.
 
+## Toggle List Follow-Up
+
+After a release package is generated, send the consolidated toggle list as a Slack DM to `ashok@pluginhive.com`. This is a standing instruction from the doc owner, so it needs no fresh approval — but always show the message text before sending, then report the result.
+
+Rules:
+
+- Send the toggle list only. Never attach the document to this message; document delivery stays under `Slack Delivery` above.
+- Skip the step entirely when no card in the release has a toggle. Say so in the final response instead of sending an empty message.
+- Build the list with `mcsl-toggle-enable-list`, reusing the `Toggle Name` column of the guide's index table as the source. One line per toggle, in this exact shape:
+
+```
+"<account uuid>.<toggle name>": true,
+```
+
+- Account UUIDs:
+  - Shopify (default): `49a5a96f-b1f0-4b9d-8a98-6173e259ee55`
+  - WooCommerce: `72d73d97-2109-4dde-8e3b-9b94cf87a863`
+- Shape example: `"72d73d97-2109-4dde-8e3b-9b94cf87a863.woocommerce.composite.classification.enabled": true,`
+- When the release mixes platforms, send one fenced block per account UUID, each with a line naming the store it is for.
+- Use `mcsl-slack-operator` for the DM, since this is a text message rather than a file upload.
+- Carry over the `mcsl-toggle-enable-list` guardrails: never invent a toggle, never repair a malformed UUID, and list anything left out with a one-line reason.
+
 ## Combined Release Package Structure
 
 Combined Support Guide:
@@ -151,6 +205,10 @@ Combined Support Guide:
 
 ## <Story ID> - <Card title>
 ### Brief Description
+...
+
+## Technical Cards
+### <Story ID> - <Card title>
 ...
 ```
 
@@ -171,7 +229,21 @@ Combined Business Brief:
 ## <Story ID> - <Card title>
 ### Brief Description
 ...
+
+## Technical Cards
+### <Story ID> - <Card title>
+...
 ```
+
+## Technical Cards Section
+
+Layout rules, which follow how `render_pdf_bytes` breaks pages:
+
+- Use one H2 `## Technical Cards` after the last normal card section. Inside a combined package the renderer page-breaks before every non-package H2, so this section gets its own page automatically — never hand-place a break.
+- List each technical card under it as an H3 `### <Story ID> - <Card title>` so the short entries flow together instead of taking a page each.
+- Two to four lines per card: what changed, and why it matters for the product or the merchant. No walkthrough, no toggles section, no expected-behaviour section.
+- Plain wording still applies. Name a version, endpoint, or field only when the entry makes no sense without it.
+- Omit the section entirely when the release has no technical cards.
 
 ## Support Guide Structure
 
@@ -200,7 +272,10 @@ Do not add `Merchant-Safe Explanation`, `Common Questions & Troubleshooting`, or
 Before finalizing:
 
 - make it understandable for support people
-- remove internal/code jargon unless necessary
+- remove internal/code jargon entirely from the body; the only exceptions are request/log callouts and the `Technical Cards` section
+- verify every card's toggle was searched for across comments, checklists, and QA evidence, not just the description
+- verify no card labelled `SL: ON Hold`, `SL: Carrier Platform`, `Spill Over`, or `SL: Closed By Support` slipped into the index table or the body
+- verify technical-only cards sit in the `Technical Cards` section at the end, not mixed into the walkthrough cards
 - keep merchant-facing wording safe and clear
 - do not expose implementation details that customers do not need
 - verify every claim comes from card/AC/TC/AI QA evidence or researched domain facts
@@ -219,6 +294,8 @@ Return:
 - document(s) generated
 - markdown path if saved
 - PDF path if rendered
+- whether the toggle list DM was sent, skipped because no card has a toggle, or failed
+- which cards were excluded and the label that triggered each exclusion
 - any missing inputs or assumptions
 
 Use absolute file paths in final responses.

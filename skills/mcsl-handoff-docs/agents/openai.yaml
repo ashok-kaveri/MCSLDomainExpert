@@ -1,3 +1,30 @@
 display_name: MCSL Handoff Docs
-short_description: Generate professional Support Guide and Business Brief PDFs for approved MCSL release cards.
-default_prompt: Generate the requested MCSL handoff document from the approved card context. If I ask for one doc, create only that one; if I ask for PDF, render it using the dashboard handoff PDF style.
+short_description: >-
+  Makes release handoff docs for approved MCSL cards. Builds a Support Guide and/or a
+  Business Brief as Markdown and PDF, using the real Trello card details. Can send them
+  to Slack when asked.
+default_prompt: |
+  Make the MCSL handoff document I asked for. Follow the mcsl-handoff-docs skill.
+
+  1. Make only the doc I asked for: Support Guide, Business Brief, or both. If you are not sure which one, ask me first.
+  2. Make one combined doc for the whole release. Make a single-card doc only if I name one card.
+  3. Read the full Trello card first: description, labels, comments, checklists, attachments, approved US/AC, test cases, and AI QA notes. Always read the QA comments, because important late notes are often only there.
+  4. Find the platform for each card: Shopify, WooCommerce, BigCommerce, Magento, or PrestaShop. Use Shopify if the card does not say. Use that platform's menu paths in the steps.
+  5. Find the toggle for each card. Look everywhere in the card, not just the description: comments, checklists, attachments, the approved AC, the test cases, and the QA notes. The toggle name is often only in a comment. Put the exact toggle name in the index table, or `None` if the card needs no toggle. If a card has more than one toggle, list them all, separated by commas. Never guess a toggle name.
+  6. Check if support must look at a carrier request, response, or log. If yes, give the exact field name right after the step it belongs to, using the callout label `Request node to verify:` (or one of its variants). Skip this for UI-only, sync-only, report-only, and speed-only cards. If you cannot find the field name, say which log to open instead. Never make up a field name.
+  7. Use the exact layout in skills/mcsl-handoff-docs/references/handoff_doc_formats.md. The index table has four columns: `Story ID`, `Story Title`, `Toggle Name`, `Trello card link`. Each card section ends after Expected Behaviour. Do not bring back the sections we removed.
+  8. Use no technical words in either doc. No code, no class or file names, no API or field jargon in the normal text, and no internal terms. Write it the way you would explain it to a person who has never seen the code. Write the Support Guide so a support person can explain the feature on a call. Keep the Business Brief short and safe for merchants, with no QA notes and no developer or tester names. The only places a technical string is allowed are the callout in rule 6, the Technical Cards section in rule 13, and toggle keys in the index table and the Toggles & Prerequisites table, which support and the dev team need exactly as written.
+  9. Do not make up owners, release numbers, dates, toggles, or limits. If something is missing, say so and still give me a usable draft.
+  10. Save the Markdown in data/handoff_docs/. Then make the PDF with skills/mcsl-handoff-docs/scripts/render_handoff_pdf.py. The PDF tool adds a page break before each card, so never add your own. Check that no card title is left alone at the bottom of a page.
+  11. Send the doc to Slack only if I told you where to send it. Do a dry run first, then send with --yes in the same reply. Tell me where it went and the file id, or the exact error. A yes for a DM is not a yes for a channel. The only send you may do without asking is the toggle list in rule 14, because I am asking for it here.
+  12. Use the other skills instead of doing their work yourself: mcsl-trello-operator to read cards and comments, mcsl-slack-operator to send, mcsl-domain-core to check current MCSL facts, mcsl-toggle-enable-list to build the toggle list.
+  13. Keep technical cards out of the main flow. A technical card is one that only a developer cares about, such as an API change, a library or version upgrade, a refactor, or an internal clean-up, with nothing for support or the merchant to see or do. Put every such card at the end of the doc, under one `## Technical Cards` heading placed after all the normal cards, with each card as a `### <Story ID> - <Card title>` entry so the short entries stay on one page. Keep those entries short: what changed and why it matters. Still list them in the index table in their normal place. If a card has both a technical part and something support can see, keep it as a normal card.
+  14. After the doc is made, send the toggle list to Slack as a DM to ashok@pluginhive.com. Send only the consolidated list, not the doc. Skip this step if no card in the release has a toggle. Build the list with mcsl-toggle-enable-list, one line per toggle, in this shape:
+      `"<account uuid>.<toggle name>": true,`
+      Use the Shopify account uuid `49a5a96f-b1f0-4b9d-8a98-6173e259ee55` by default. For a WooCommerce store use `72d73d97-2109-4dde-8e3b-9b94cf87a863` instead. Example of the shape:
+      `"72d73d97-2109-4dde-8e3b-9b94cf87a863.woocommerce.composite.classification.enabled": true,`
+      If the release has both Shopify and WooCommerce cards, send one block per account uuid with a line saying which store it is for. Show me the message before sending, then send it and tell me the result.
+
+  15. Leave out any card carrying one of these labels: `SL: ON Hold`, `SL: Carrier Platform`, `Spill Over`, `SL: Closed By Support`. Match the label loosely, ignoring case and any emoji or prefix around it. Leave the card out of the index table too, not just the body. Include such a card only if I name it or tell you to include it. Always list the cards you left out and the label that caused it, so I can see the release is short on purpose.
+
+  At the end, tell me which docs you made, the full file paths, whether the toggle list was sent, which cards you left out and why, what you assumed, and what was missing.
