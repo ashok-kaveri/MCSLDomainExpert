@@ -1,27 +1,22 @@
-# UPS WooCommerce Shipping 6.6.2 — Support Guide
+# WooCommerce UPS Shipping Plugin with Print Label 6.6.2 — Support Guide
 
-Platform: WooCommerce (WordPress). Carrier: UPS. Plugin: UPS WooCommerce Shipping. Version: **6.6.2**.
+Platform: WooCommerce (WordPress). Carrier: UPS. Version: **6.6.2**. Release date: **31 July 2026**.
 
-All fixes in this guide are available from plugin version **6.6.2**. If a merchant does not see the behaviour described here, confirm their plugin version first.
+All fixes in this guide are available from plugin version **6.6.2**, released **31 July 2026**. If a merchant does not see the behaviour described here, confirm their plugin version first.
 
 ## Included Story Cards
 
-| Story card Number | Title | Ticket number |
+| Story ID | Story Title | Trello card link |
 |---|---|---|
-| 941 | Add DAP (Delivery at Place) Incoterm option to Terms of Sale | Zendesk 399883 |
-| 943 | UPS Simple Rate incorrectly applied to international shipments | Zendesk 399683 |
-| 942 | Duplicate save-confirmation notice on WordPress admin settings pages | Zendesk 399160 |
+| 941 | [Improvement] Add DAP (Delivery at Place) Incoterm option to Terms of Sale | https://trello.com/c/UwvMlJXN |
+| 943 | [Bug Fix] UPS Simple Rate incorrectly applied to international shipments | https://trello.com/c/lJxBlnJU |
+| 942 | [Bug Fix] Duplicate save-confirmation notice on WordPress admin settings pages | https://trello.com/c/U2LzivwN |
 
-## How Support Should Use This Package
-
-- Use each card section as the support and demo guide for that fix.
-- Confirm the merchant's plugin version, WooCommerce store, UPS account, and the specific order or settings page before promising behaviour.
-
----
-
-## 941 - Add DAP (Delivery at Place) Incoterm option to Terms of Sale
+## 941 - [Improvement] Add DAP (Delivery at Place) Incoterm option to Terms of Sale
 
 ### Brief Description
+
+Reported in Zendesk ticket 399883.
 
 The Terms of Sale (Incoterm) dropdown used for international UPS shipments was missing **DAP – Delivery at Place**. Merchants had to pick a close-but-wrong term instead. DAP has now been added in both places the dropdown appears — the plugin's International Forms settings and the Terms of shipment dropdown on the order screen. All 12 existing terms are unchanged.
 
@@ -53,11 +48,11 @@ The Terms of Sale (Incoterm) dropdown used for international UPS shipments was m
 
 DAP appears in both dropdowns, saves and persists after reload, and generates an international label successfully. Every other Incoterm behaves exactly as before.
 
----
-
-## 943 - UPS Simple Rate incorrectly applied to international shipments
+## 943 - [Bug Fix] UPS Simple Rate incorrectly applied to international shipments
 
 ### Brief Description
+
+Reported in Zendesk ticket 399683.
 
 With **UPS Simple Rate** enabled, international orders (for example US to Canada) failed with *"The requested accessory option is unavailable between the selected locations."* Simple Rate is a US-domestic-only UPS service, but its details were being sent on international shipments too. Merchants had to disable Simple Rate, make the label, then re-enable it every time. Simple Rate is now applied only to shipments inside the US 50 states. International destinations — **and Puerto Rico** — use the merchant's normal UPS services instead.
 
@@ -98,11 +93,11 @@ With **UPS Simple Rate** enabled, international orders (for example US to Canada
 
 Simple Rate applies to the US 50 states only. Canada, all other countries, and Puerto Rico rate and label normally with no accessory-option error, and the Simple Rate setting never needs to be toggled.
 
----
-
-## 942 - Duplicate save-confirmation notice on WordPress admin settings pages
+## 942 - [Bug Fix] Duplicate save-confirmation notice on WordPress admin settings pages
 
 ### Brief Description
+
+Reported in Zendesk ticket 399160.
 
 While the UPS plugin was active, saving a WordPress settings page showed the confirmation message twice, stacked. It happened on Settings → General, Permalinks, and the UPS License page. The save itself always worked, but the doubled message looked like an error. The message now appears exactly once, matching normal WordPress behaviour. No page lost its message.
 

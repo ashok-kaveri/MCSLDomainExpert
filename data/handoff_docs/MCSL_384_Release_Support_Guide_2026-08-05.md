@@ -28,7 +28,7 @@
 
 ### Brief Description
 
-MCSL 384 adds support for WooCommerce Composite Products (created via the WooCommerce Composite Products plugin) in MCSL. Previously, composite product types were not recognised during import, causing silent skips or incorrect packing behaviour. With this change, composite products import correctly into the MCSL Products list, and order line items reflect component-level "Shipped Individually" configuration — either as separate line items or as a single unit — for USPS and USPS Stamps label generation.
+MCSL 384 adds support for WooCommerce Composite Products (created via the WooCommerce Composite Products plugin) in WSS. Previously, composite product types were not recognised during import, causing silent skips or incorrect packing behaviour. With this change, composite products import correctly into the WSS Products list, and order line items reflect component-level "Shipped Individually" configuration — either as separate line items or as a single unit — for USPS and USPS Stamps label generation.
 
 ### Toggles & Prerequisites
 
@@ -43,24 +43,23 @@ MCSL 384 adds support for WooCommerce Composite Products (created via the WooCom
 
 **Scenario 1 — Composite product imports and displays correctly**
 
-1. In WooCommerce Admin, go to MCSL > hamburger menu > Products and trigger a product import.
+1. In WooCommerce Admin, go to WSS > hamburger menu > Products and trigger a product import.
 2. Confirm the composite product (e.g., "Create Your Own Gift Box") appears in the Products list with correct name and SKU (e.g., "Citrine & Navy 3×250ml").
 3. Open the imported product record and verify name, SKU, weight, and dimensions match the WooCommerce product source.
 
 **Scenario 2 — Order import and label generation**
 
-4. In WooCommerce Admin, go to MCSL > ORDERS tab and open an order containing a composite product.
+4. In WooCommerce Admin, go to WSS > ORDERS tab and open an order containing a composite product.
 5. If components are set to **Shipped Individually**: confirm each component appears as a separate line item with its own weight and dimensions.
 6. If components are **not** set to Shipped Individually: confirm the order shows the composite as a single line item using parent-level dimensions.
 7. Open Prepare Shipment and confirm correct item count loads with no "invalid payload" error.
 8. Click Generate Label via USPS Stamps and confirm the label generates successfully with no payload or packaging validation error.
-- Request/log fields to verify: _composite_parent, _composite_children meta keys present; classification logged as composite path, not plain/unknown product path.
 
 ### Expected Behaviour
 
 | What support should observe | How to confirm |
 |---|---|
-| Composite product appears in MCSL Products list after import | hamburger menu > Products — name and SKU visible, no "unknown product type" warning |
+| Composite product appears in WSS Products list after import | hamburger menu > Products — name and SKU visible, no "unknown product type" warning |
 | Line items reflect "Shipped Individually" setting per component | ORDERS tab > open order — separate line items or single unit depending on component config |
 | Label generates without "invalid payload" error | Prepare Shipment and Generate Label complete successfully; tracking number visible in order view |
 | WooCommerce Product Bundles (non-composite) continue to work | Regression: open a bundle order and confirm label generation still succeeds |
@@ -70,7 +69,7 @@ MCSL 384 adds support for WooCommerce Composite Products (created via the WooCom
 
 ### Brief Description
 
-Prior to this fix, the MCSL WooCommerce plugin sent `status=publish` as a hardcoded query parameter when fetching products from the WooCommerce REST API. Products with role-based catalog visibility restrictions (e.g., wholesale-only) are published in WooCommerce but were silently excluded by this filter, causing them to be missing from the MCSL Products list on manual import. The fix removes that hardcoded parameter so role-restricted published products are imported correctly. Auto-import via webhook was not affected.
+Prior to this fix, the WSS plugin sent `status=publish` as a hardcoded query parameter when fetching products from the WooCommerce REST API. Products with role-based catalog visibility restrictions (e.g., wholesale-only) are published in WooCommerce but were silently excluded by this filter, causing them to be missing from the WSS Products list on manual import. The fix removes that hardcoded parameter so role-restricted published products are imported correctly. Auto-import via webhook was not affected.
 
 ### Toggles & Prerequisites
 
@@ -86,23 +85,22 @@ Prior to this fix, the MCSL WooCommerce plugin sent `status=publish` as a hardco
 **Scenario 1 — Verify role-restricted products now import**
 
 1. In WooCommerce Admin, confirm at least one product exists with role-based catalog visibility restriction and published status.
-2. Navigate to WooCommerce Admin → MCSL → Products and click **Import** to trigger a bulk product import.
-3. After import completes, confirm the role-restricted product appears in the MCSL Products list alongside standard products.
-4. Navigate to WooCommerce Admin → MCSL → Request Log and open the outbound product fetch request.
-- Request node to verify: confirm query string does not contain status=publish
-5. Open an order containing the role-restricted product in WooCommerce Admin → MCSL → Orders; open the order and check Prepare Shipment — confirm weight and dimensions are populated, not blank or zero.
+2. Navigate to WooCommerce Admin → WSS → Products and click **Import** to trigger a bulk product import.
+3. After import completes, confirm the role-restricted product appears in the WSS Products list alongside standard products.
+4. Navigate to WooCommerce Admin → WSS → Request Log and open the outbound product fetch request.
+5. Open an order containing the role-restricted product in WooCommerce Admin → WSS → Orders; open the order and check Prepare Shipment — confirm weight and dimensions are populated, not blank or zero.
 
 **Scenario 2 — Regression: standard products unaffected**
 
-6. After the same bulk import, confirm all previously importable standard publicly visible products still appear in the MCSL Products list.
+6. After the same bulk import, confirm all previously importable standard publicly visible products still appear in the WSS Products list.
 
 ### Expected Behaviour
 
 | What support should observe | How to confirm |
 |---|---|
-| Role-restricted published products appear in MCSL Products list after manual import | Products list in WooCommerce Admin → MCSL → Products shows the product by name and SKU |
+| Role-restricted published products appear in WSS Products list after manual import | Products list in WooCommerce Admin → WSS → Products shows the product by name and SKU |
 | `status=publish` absent from outbound API request | Request Log entry for the product fetch has no `status=publish` in the query string |
-| Weight and dimensions populated on orders with role-restricted products | Prepare Shipment panel in MCSL Orders shows non-zero values sourced from the imported product |
+| Weight and dimensions populated on orders with role-restricted products | Prepare Shipment panel in WSS Orders shows non-zero values sourced from the imported product |
 | Standard publicly visible products import without regression | All products importable before the fix remain present after re-import |
 
 ## ZI-631 - BlitzNow carrier integration [#392759]
@@ -341,7 +339,7 @@ The WSS filter panel on the MCSL orders page was being clipped or cut off when t
 
 ### Brief Description
 
-When a WooCommerce order was cancelled and then moved back to Processing, the MCSL WSS sync was not re-importing the order — leaving it stuck in a previous batch and ineligible for label generation. This fix introduces a toggle-gated reactivation path: when a CANCELLED sub-order is detected during sync, the order falls through to a full re-import instead of patching in place. Affects WSS order sync on WooCommerce only.
+When a WooCommerce order was cancelled and then moved back to Processing, the WSS sync was not re-importing the order — leaving it stuck in a previous batch and ineligible for label generation. This fix introduces a toggle-gated reactivation path: when a CANCELLED sub-order is detected during sync, the order falls through to a full re-import instead of patching in place. Affects WSS order sync on WooCommerce only.
 
 ### Toggles & Prerequisites
 
@@ -364,7 +362,9 @@ When a WooCommerce order was cancelled and then moved back to Processing, the MC
 6. Open WSS — verify the order reappears as active with the current shipping address.
 7. Attempt to generate a new label for the order.
 
-Expected: Old label is cancelled, order is re-eligible for label generation, new label generates successfully.
+Expected: The order will be re-eligible for label generation, and a new label can be generated successfully.
+
+Note: The previously generated label is not cancelled by our application. The merchant must cancel the old label manually from the carrier's dashboard before generating a new label (existing behaviour — a backlog card has been raised).
 
 **Toggle OFF**
 
@@ -381,9 +381,9 @@ Expected: WSS does NOT auto-sync the reactivation — order retains the pre-canc
 
 | What support should observe | How to confirm |
 |---|---|
-| Reactivated order appears in WSS ORDERS grid with current Woo address and line items | Check MCSL ORDERS tab after ~60–75 s; no manual re-import needed |
+| Reactivated order appears in WSS ORDERS grid with current Woo address and line items | Check WSS ORDERS tab after ~60–75 s; no manual re-import needed |
 | Sync log contains fall-through message for CANCELLED sub-order | hamburger menu > Request Log — look for `"has 1 CANCELLED sub-order(s) — falling through for reactivation"` |
-| Label generation succeeds on reactivated order with no batch-association error | Prepare Shipment / Generate Label completes without error in MCSL ORDERS tab |
+| Label generation succeeds on reactivated order with no batch-association error | Prepare Shipment / Generate Label completes without error in WSS ORDERS tab |
 | Never-cancelled orders continue to sync in place; no fall-through log line emitted | Confirm via Request Log — patch fires once, no reactivation message present |
 
 ## ZI-652 - USPS REST Puerto Rico country code [#396604]
