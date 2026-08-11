@@ -23,9 +23,9 @@ This is opt-in: the merchant must add `[ADDITIONAL LABELS]` to their label email
 ### Prerequisites
 
 - Plugin version 6.6.3 or later.
-- **Send Shipping Label via Email** must be enabled under **UPS Settings → Shipping Labels**. This applies to the shipping label email generally — it is not limited to automatic label generation.
+- **Send Shipping Label via Email** must be set to **Shipper**, **Receiver**, or both, under **UPS Settings → Shipping Labels**. This applies to the shipping label email generally — it is not limited to automatic label generation.
 - **Required setup:** go to **UPS Settings → Shipping Labels → Send Shipping Label via Email → Content of Email With Label** and add the `[ADDITIONAL LABELS]` tag.
-  - The **Content of Email With Label** field is only displayed once **Send Shipping Label via Email** is set, so enable that first.
+  - The **Content of Email With Label** field is only displayed once **Send Shipping Label via Email** has a selection, so set that first.
   - The tag is also available from the tag picker next to the field.
 - To see each document type, the shipment must actually produce it (for example an international shipment for the Commercial Invoice, a Dangerous Goods shipment for the DG documents).
 
@@ -34,7 +34,7 @@ This is opt-in: the merchant must add `[ADDITIONAL LABELS]` to their label email
 **Setup — add the tag to the label email content**
 
 1. In WordPress Admin, go to **UPS Settings → Shipping Labels**.
-2. Confirm **Send Shipping Label via Email** is enabled. The **Content of Email With Label** field appears only after this is set.
+2. Set **Send Shipping Label via Email** to **Shipper**, **Receiver**, or both. The **Content of Email With Label** field appears only once a selection is made.
 3. In **Content of Email With Label**, add `[ADDITIONAL LABELS]` where the document buttons should appear in the email body, then save.
 4. Confirm the tag is listed among the available tags shown next to the field.
 
@@ -77,4 +77,4 @@ This is opt-in: the merchant must add `[ADDITIONAL LABELS]` to their label email
 
 When `[ADDITIONAL LABELS]` is present in **Content of Email With Label**, the shipping label email shows a download button for every extra document that exists for that shipment and attaches those files. Shipments without extra documents send exactly as before, with no tag text left in the email.
 
-If a merchant reports the buttons are missing, check two things first, in this order: that **Send Shipping Label via Email** is enabled, and that the `[ADDITIONAL LABELS]` tag is present in **Content of Email With Label**. A missing tag is the most common cause, not a failed document.
+If a merchant reports the buttons are missing, check two things first, in this order: that **Send Shipping Label via Email** is set to **Shipper**, **Receiver**, or both, and that the `[ADDITIONAL LABELS]` tag is present in **Content of Email With Label**. A missing tag is the most common cause, not a failed document.
